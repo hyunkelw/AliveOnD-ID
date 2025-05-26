@@ -1,19 +1,35 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager Navigation
 
 <PageTitle>AliveOnD-ID</PageTitle>
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
+@if (IsChatPage)
+{
+    <!-- Full-screen layout for chat page -->
+    <div class="chat-fullscreen">
+        @Body
     </div>
-
-    <main>
-        <div class="top-row px-4">
-            <a href="https://docs.microsoft.com/aspnet/" target="_blank">About</a>
+}
+else
+{
+    <!-- Normal layout with sidebar for other pages -->
+    <div class="page">
+        <div class="sidebar">
+            <NavMenu />
         </div>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+        <main>
+            <div class="top-row px-4">
+                <a href="https://docs.microsoft.com/aspnet/" target="_blank">About</a>
+            </div>
+
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+}
+
+@code {
+    private bool IsChatPage => Navigation.Uri.Contains("/chat", StringComparison.OrdinalIgnoreCase);
+}

@@ -1,0 +1,32 @@
+@page "/chat"
+@page "/chat/{sessionId}"
+@using AliveOnD_ID.Components
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AliveOnD-ID Chat</title>
+    <link href="~/css/chat.css" rel="stylesheet" />
+</head>
+<body>
+    <ChatLayout SessionId="@SessionId" UserId="@UserId" />
+    
+    <script src="_framework/blazor.server.js"></script>
+    <script src="~/js/chat.js"></script>
+</body>
+</html>
+
+@code {
+    [Parameter] public string? SessionId { get; set; }
+    
+    private string? UserId;
+
+    protected override void OnInitialized()
+    {
+        // Generate a user ID if not provided (for demo purposes)
+        // In a real app, this would come from authentication
+        UserId = $"user_{DateTime.Now:yyyyMMddHHmmss}";
+    }
+}

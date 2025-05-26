@@ -1,3 +1,15 @@
+/* Full-screen layout for chat page */
+.chat-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    z-index: 1000;
+}
+
+/* Normal page layout */
 .page {
     position: relative;
     display: flex;
