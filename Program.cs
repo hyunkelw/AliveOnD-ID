@@ -4,6 +4,19 @@ using AliveOnD_ID.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var servicesSection = builder.Configuration.GetSection("Services");
+var didSection = servicesSection.GetSection("DID");
+var apiKeySetting = didSection["ApiKey"];
+
+if (!string.IsNullOrEmpty(apiKeySetting))
+{
+     var envValue = Environment.GetEnvironmentVariable(apiKeySetting);
+    if (!string.IsNullOrEmpty(envValue))
+    {
+        builder.Configuration["Services:DID:ApiKey"] = envValue;
+    }
+}
+
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
