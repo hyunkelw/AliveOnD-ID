@@ -3,18 +3,20 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
 @inject IChatSessionService SessionService
+@inject IAvatarStreamService AvatarService
 @inject IJSRuntime JS
 
 <div class="fullscreen-avatar-container">
     <!-- Full Background Avatar -->
     <div class="avatar-background">
         <video id="avatar-video" 
-               class="avatar-video-fullscreen" 
-               autoplay 
-               playsinline 
-               muted="@(!IsAvatarSpeaking)">
-            Your browser does not support the video tag.
-        </video>
+       class="avatar-video-fullscreen" 
+       autoplay 
+       playsinline 
+       muted="false"
+       style="opacity: 1; display: block;">
+    Your browser does not support the video tag.
+</video>
         
         <!-- Avatar Status Overlay (minimal) -->
         <div class="avatar-status-overlay">
@@ -22,14 +24,21 @@
             {
                 <div class="status-indicator connecting">
                     <div class="loading-spinner"></div>
-                    <span>Connecting...</span>
+                    <span>Connecting to avatar...</span>
                 </div>
             }
             else if (AvatarStatus == StreamStatus.Error)
             {
                 <div class="status-indicator error">
                     <div class="error-icon">⚠️</div>
-                    <span>Connection Error</span>
+                    <span>Avatar connection failed</span>
+                </div>
+            }
+            else if (AvatarStatus == StreamStatus.Connected)
+            {
+                <div class="status-indicator connected">
+                    <div class="connected-icon">✅</div>
+                    <span>Avatar ready</span>
                 </div>
             }
         </div>
@@ -39,7 +48,7 @@
     <div class="chat-overlay @(IsChatVisible ? "visible" : "hidden")">
         <!-- Chat Header (minimal) -->
         <div class="chat-overlay-header">
-            <h4>Chat with AI</h4>
+            <h4>Chat with AI Avatar</h4>
             <button class="chat-toggle-btn" @onclick="ToggleChatVisibility">
                 @(IsChatVisible ? "−" : "💬")
             </button>
@@ -91,7 +100,15 @@
             else
             {
                 <div class="welcome-message">
-                    <p>👋 Start talking with your AI avatar!</p>
+                    <p>👋 Your AI avatar is @(AvatarStatus == StreamStatus.Connected ? "ready" : "connecting")! Start chatting!</p>
+                </div>
+            }
+            
+            @if (!string.IsNullOrEmpty(ConnectionError))
+            {
+                <div class="error-message">
+                    <p>⚠️ @ConnectionError</p>
+                    <button class="retry-btn" @onclick="RetryConnection">Retry Connection</button>
                 </div>
             }
         </div>
@@ -103,7 +120,7 @@
         <div class="voice-control-section">
             <button class="voice-record-btn @(IsRecording ? "recording" : "")" 
                     @onclick="ToggleRecording"
-                    disabled="@IsProcessing">
+                    disabled="@(IsProcessing || AvatarStatus != StreamStatus.Connected)">
                 @if (IsRecording)
                 {
                     <div class="record-icon recording-icon">⏹️</div>
@@ -140,11 +157,11 @@
                        @bind="CurrentMessage" 
                        @onkeypress="HandleKeyPress"
                        placeholder="Type a message..." 
-                       disabled="@IsProcessing"
+                       disabled="@(IsProcessing || AvatarStatus != StreamStatus.Connected)"
                        class="overlay-text-input" />
                 <button class="send-text-btn" 
                         @onclick="SendTextMessage" 
-                        disabled="@(IsProcessing || string.IsNullOrWhiteSpace(CurrentMessage))">
+                        disabled="@(IsProcessing || string.IsNullOrWhiteSpace(CurrentMessage) || AvatarStatus != StreamStatus.Connected)">
                     ➤
                 </button>
             </div>
@@ -165,9 +182,15 @@
     private bool IsProcessing = false;
     private bool IsAvatarSpeaking = false;
     private bool IsChatVisible = true;
-    private bool ShowTextInput = false;
+    private bool ShowTextInput = true; // Start with text input visible
     private StreamStatus AvatarStatus = StreamStatus.Disconnected;
     private string RecordingTime = "00:00";
+    private string ConnectionError = string.Empty;
+    
+    // Avatar stream data
+    private string? AvatarStreamId;
+    private string? AvatarSessionId;
+    private DIDStreamResponse? StreamResponse;
 
     protected override async Task OnInitializedAsync()
     {
@@ -179,6 +202,96 @@
         {
             await CreateNewSession();
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Auto-connect to D-ID avatar after first render
+            await ConnectToAvatar();
+        }
+    }
+
+    private async Task ConnectToAvatar()
+    {
+        try
+        {
+            AvatarStatus = StreamStatus.Connecting;
+            ConnectionError = string.Empty;
+            StateHasChanged();
+
+            // Create D-ID stream
+            StreamResponse = await AvatarService.CreateStreamAsync();
+            AvatarStreamId = StreamResponse.Id;
+            AvatarSessionId = StreamResponse.SessionId;
+
+            Console.WriteLine($"D-ID Stream created: {AvatarStreamId}");
+
+            // Initialize WebRTC connection via JavaScript
+            var success = await JS.InvokeAsync<bool>("initializeAvatarStream", 
+                StreamResponse.IceServers, StreamResponse.Offer);
+
+            Console.WriteLine($"WebRTC initialization result: {success}");
+
+            if (success)
+            {
+                // Get the SDP answer from JavaScript
+                var sdpAnswer = await JS.InvokeAsync<object>("getSdpAnswer");
+                
+                if (sdpAnswer != null)
+                {
+                    Console.WriteLine("Sending SDP answer to D-ID...");
+                    
+                    // Send SDP answer to D-ID
+                    var streamStarted = await AvatarService.StartStreamAsync(AvatarStreamId, AvatarSessionId, sdpAnswer);
+                    
+                    if (streamStarted)
+                    {
+                        Console.WriteLine("D-ID stream started successfully");
+                        
+                        // Wait a moment for the stream to initialize
+                        await Task.Delay(3000);
+                        
+                        // Send a test message to activate the avatar video
+                        Console.WriteLine("Sending test message to activate avatar...");
+                        await SendTextToAvatar("Hello! I am your AI assistant. I am now ready to help you.");
+                        
+                        AvatarStatus = StreamStatus.Connected;
+                        StateHasChanged();
+                    }
+                    else
+                    {
+                        AvatarStatus = StreamStatus.Error;
+                        ConnectionError = "Failed to start D-ID stream";
+                    }
+                }
+                else
+                {
+                    AvatarStatus = StreamStatus.Error;
+                    ConnectionError = "Failed to get SDP answer from WebRTC";
+                }
+            }
+            else
+            {
+                AvatarStatus = StreamStatus.Error;
+                ConnectionError = "Failed to establish WebRTC connection";
+            }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            AvatarStatus = StreamStatus.Error;
+            ConnectionError = $"Connection failed: {ex.Message}";
+            Console.WriteLine($"Avatar connection error: {ex}");
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetryConnection()
+    {
+        await ConnectToAvatar();
     }
 
     private async Task LoadSession()
@@ -225,7 +338,7 @@
 
     private async Task SendTextMessage()
     {
-        if (string.IsNullOrWhiteSpace(CurrentMessage) || IsProcessing)
+        if (string.IsNullOrWhiteSpace(CurrentMessage) || IsProcessing || AvatarStatus != StreamStatus.Connected)
             return;
 
         IsProcessing = true;
@@ -258,13 +371,17 @@
             // Scroll to bottom
             await ScrollToBottom();
 
-            // TODO: Process message through LLM and Avatar services
-            await Task.Delay(2000); // Simulate processing
+            // TODO: Get LLM response - for now using mock response
+            await Task.Delay(1000); // Simulate LLM processing
 
             // Update AI message with response
-            aiMessage.Content = $"I received your message: \"{messageText}\". This is a mock response while we integrate the LLM service.";
+            var responseText = $"I understand you said: \"{messageText}\". This is a test response while we integrate the full LLM service.";
+            aiMessage.Content = responseText;
             aiMessage.Status = MessageStatus.Completed;
             await SessionService.UpdateMessageAsync(SessionId!, aiMessage);
+
+            // Send response to avatar
+            await SendTextToAvatar(responseText);
 
             StateHasChanged();
         }
@@ -275,6 +392,36 @@
         finally
         {
             IsProcessing = false;
+        }
+    }
+
+    private async Task SendTextToAvatar(string text)
+    {
+        if (AvatarStatus != StreamStatus.Connected || string.IsNullOrEmpty(AvatarStreamId) || string.IsNullOrEmpty(AvatarSessionId))
+            return;
+
+        try
+        {
+            AvatarStatus = StreamStatus.Speaking;
+            StateHasChanged();
+
+            var success = await AvatarService.SendTextToAvatarAsync(AvatarStreamId, AvatarSessionId, text);
+            
+            if (!success)
+            {
+                Console.WriteLine("Failed to send text to avatar");
+            }
+
+            // Reset status after a delay (avatar speaking time)
+            await Task.Delay(3000);
+            AvatarStatus = StreamStatus.Connected;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending text to avatar: {ex.Message}");
+            AvatarStatus = StreamStatus.Connected;
+            StateHasChanged();
         }
     }
 
@@ -295,7 +442,6 @@
         try
         {
             IsRecording = true;
-            // TODO: Call JavaScript to start audio recording
             await JS.InvokeVoidAsync("startAudioRecording");
             StateHasChanged();
         }
@@ -311,11 +457,10 @@
         try
         {
             IsRecording = false;
-            // TODO: Call JavaScript to stop audio recording and get audio data
             await JS.InvokeVoidAsync("stopAudioRecording");
             StateHasChanged();
 
-            // Simulate audio message processing
+            // TODO: Process audio recording
             await Task.Delay(1000);
 
             var audioMessage = new ChatMessage
@@ -323,7 +468,7 @@
                 Type = MessageType.UserAudio,
                 Content = "Voice message (transcribed)",
                 Status = MessageStatus.Completed,
-                AudioUrl = "/audio/sample.mp3" // Placeholder
+                AudioUrl = "/audio/sample.mp3"
             };
 
             Messages.Add(audioMessage);
@@ -358,5 +503,26 @@
     {
         ShowTextInput = !ShowTextInput;
         StateHasChanged();
+    }
+
+    // JavaScript interop methods for handling WebRTC callbacks
+    [JSInvokable]
+    public static async Task HandleConnectionStateChange(string state)
+    {
+        Console.WriteLine($"WebRTC connection state: {state}");
+    }
+
+    [JSInvokable] 
+    public static async Task HandleIceCandidate(object candidate)
+    {
+        Console.WriteLine("ICE candidate received");
+        // TODO: Send ICE candidate to D-ID if needed
+    }
+
+    [JSInvokable]
+    public static async Task HandleAudioData(object audioData)
+    {
+        Console.WriteLine("Audio data received from recording");
+        // TODO: Process recorded audio
     }
 }

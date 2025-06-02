@@ -568,3 +568,88 @@
         padding: 12px;
     }
 }
+
+/* Additional CSS for Avatar Status and Error Handling */
+
+/* Connected status indicator */
+.status-indicator.connected {
+    background: rgba(34, 197, 94, 0.8);
+}
+
+.connected-icon {
+    font-size: 1rem;
+}
+
+/* Error message in chat */
+.error-message {
+    text-align: center;
+    color: rgba(239, 68, 68, 0.9);
+    margin: 20px 0;
+    padding: 16px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 12px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.error-message p {
+    margin: 0 0 12px 0;
+    font-weight: 500;
+}
+
+.retry-btn {
+    background: rgba(239, 68, 68, 0.8);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease;
+}
+
+.retry-btn:hover {
+    background: rgba(220, 38, 38, 0.9);
+}
+
+/* Speaking status for avatar */
+.status-indicator.speaking {
+    background: rgba(168, 85, 247, 0.8);
+}
+
+/* Disabled state for controls */
+.voice-record-btn:disabled {
+    background: rgba(156, 163, 175, 0.5);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.overlay-text-input:disabled {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    cursor: not-allowed;
+}
+
+.send-text-btn:disabled {
+    background: rgba(156, 163, 175, 0.3);
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Enhanced status transitions */
+.status-indicator {
+    transition: all 0.3s ease;
+}
+
+.avatar-status-overlay {
+    transition: opacity 0.3s ease;
+}
+
+.avatar-video-fullscreen {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    /* Remove any opacity: 0 that might be hiding it */
+    opacity: 1 !important;
+}

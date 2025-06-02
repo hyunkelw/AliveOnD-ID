@@ -1,0 +1,381 @@
+@page "/avatar-test"
+@using AliveOnD_ID.Services.Interfaces
+@inject IAvatarStreamService AvatarService
+@inject IJSRuntime JS
+
+<PageTitle>Avatar Test - AliveOnD-ID</PageTitle>
+
+<div class="container mt-4">
+    <h2>D-ID Avatar Streaming Test</h2>
+    <p class="text-muted">Test avatar creation, connection, and speech functionality</p>
+
+    <div class="row">
+        <!-- Control Panel -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Avatar Controls</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Stream Management -->
+                    <div class="mb-3">
+                        <h6>Stream Management</h6>
+                        <button class="btn btn-primary me-2" @onclick="CreateStream" disabled="@IsProcessing">
+                            @if (IsProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Create Stream
+                        </button>
+                        <button class="btn btn-danger" @onclick="CloseStream" disabled="@(string.IsNullOrEmpty(CurrentStreamId) || IsProcessing)">
+                            Close Stream
+                        </button>
+                    </div>
+
+                    <!-- Connection Status -->
+                    <div class="mb-3">
+                        <h6>Status</h6>
+                        <span class="badge @GetStatusBadgeClass()">@ConnectionStatus</span>
+                        @if (!string.IsNullOrEmpty(CurrentStreamId))
+                        {
+                            <div class="mt-2">
+                                <small class="text-muted">Stream ID: @CurrentStreamId</small>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Speech Test -->
+                    <div class="mb-3">
+                        <h6>Make Avatar Speak</h6>
+                        <div class="mb-2">
+                            <textarea class="form-control" 
+                                     rows="3" 
+                                     placeholder="Enter text for avatar to speak..."
+                                     @bind="SpeechText"
+                                     disabled="@(!IsConnected || IsProcessing)"></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <select class="form-select" @bind="SelectedEmotion" disabled="@(!IsConnected || IsProcessing)">
+                                <option value="">No emotion</option>
+                                <option value="happy">Happy</option>
+                                <option value="sad">Sad</option>
+                                <option value="angry">Angry</option>
+                                <option value="surprised">Surprised</option>
+                                <option value="neutral">Neutral</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-success" 
+                               @onclick="MakeAvatarSpeak" 
+                               disabled="@(!IsConnected || IsProcessing || string.IsNullOrWhiteSpace(SpeechText))">
+                            @if (IsProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Speak
+                        </button>
+                    </div>
+
+                    <!-- Quick Test Phrases -->
+                    <div class="mb-3">
+                        <h6>Quick Test Phrases</h6>
+                        <div class="d-grid gap-1">
+                            <button class="btn btn-outline-secondary btn-sm" @onclick='() => SetSpeechText("Hello! I am your AI avatar assistant.")' disabled="@(!IsConnected || IsProcessing)">
+                                Hello Message
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" @onclick='() => SetSpeechText("This is a test of the D-ID avatar streaming system.")' disabled="@(!IsConnected || IsProcessing)">
+                                Test Message
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" @onclick='() => SetSpeechText("How can I help you today?")' disabled="@(!IsConnected || IsProcessing)">
+                                Help Message
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debug Info -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6>Debug Information</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>WebRTC Support:</strong> 
+                        <span id="webrtc-support" class="badge bg-secondary">Checking...</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Connection State:</strong> 
+                        <span id="connection-state" class="badge bg-secondary">Not connected</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Last Action:</strong> 
+                        <small class="text-muted">@LastAction</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Avatar Video -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Avatar Video Stream</h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="avatar-video-container" style="background: #000; border-radius: 8px; position: relative; aspect-ratio: 16/9;">
+                        <video id="avatar-video" 
+                               style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"
+                               autoplay 
+                               playsinline 
+                               controls>
+                            Your browser does not support the video tag.
+                        </video>
+                        
+                        @if (!IsConnected)
+                        {
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center;">
+                                <h4>Avatar Not Connected</h4>
+                                <p>Create a stream to start the avatar video</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6>Activity Log</h6>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="ClearLogs">Clear</button>
+                </div>
+                <div class="card-body">
+                    <div style="height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+                        @foreach (var log in Logs.AsEnumerable().Reverse())
+                        {
+                            <div class="mb-1">
+                                <span class="text-muted">[@log.Timestamp.ToString("HH:mm:ss")]</span>
+                                <span class="@GetLogLevelClass(log.Level)">@log.Message</span>
+                            </div>
+                        }
+                        @if (!Logs.Any())
+                        {
+                            <div class="text-muted">No activity yet. Create a stream to start testing.</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string ConnectionStatus = "Disconnected";
+    private string CurrentStreamId = string.Empty;
+    private string CurrentSessionId = string.Empty;
+    private string SpeechText = string.Empty;
+    private string SelectedEmotion = string.Empty;
+    private string LastAction = "None";
+    private bool IsProcessing = false;
+    private bool IsConnected = false;
+
+    private List<LogEntry> Logs = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check WebRTC support
+            await JS.InvokeVoidAsync("eval", @"
+                document.getElementById('webrtc-support').textContent = 
+                    window.RTCPeerConnection ? 'Supported' : 'Not Supported';
+                document.getElementById('webrtc-support').className = 
+                    window.RTCPeerConnection ? 'badge bg-success' : 'badge bg-danger';
+            ");
+        }
+    }
+
+    private async Task CreateStream()
+    {
+        IsProcessing = true;
+        AddLog("Creating D-ID stream...", LogLevel.Info);
+        StateHasChanged();
+
+        try
+        {
+            var response = await AvatarService.CreateStreamAsync();
+            CurrentStreamId = response.Id;
+            CurrentSessionId = response.SessionId;
+            ConnectionStatus = "Stream Created";
+            LastAction = "Stream created successfully";
+            
+            AddLog($"Stream created: {CurrentStreamId}", LogLevel.Success);
+            AddLog("Note: WebRTC connection setup required for video", LogLevel.Warning);
+            
+            // Note: In a real implementation, you would set up WebRTC here
+            // For testing purposes, we'll mark as connected
+            IsConnected = true;
+            ConnectionStatus = "Connected (Mock)";
+        }
+        catch (Exception ex)
+        {
+            AddLog($"Error creating stream: {ex.Message}", LogLevel.Error);
+            ConnectionStatus = "Error";
+            LastAction = "Stream creation failed";
+        }
+        finally
+        {
+            IsProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task MakeAvatarSpeak()
+    {
+        if (string.IsNullOrWhiteSpace(SpeechText) || !IsConnected)
+            return;
+
+        IsProcessing = true;
+        AddLog($"Making avatar speak: \"{SpeechText}\"", LogLevel.Info);
+        StateHasChanged();
+
+        try
+        {
+            var success = await AvatarService.SendTextToAvatarAsync(
+                CurrentStreamId, 
+                CurrentSessionId, 
+                SpeechText, 
+                string.IsNullOrEmpty(SelectedEmotion) ? null : SelectedEmotion);
+
+            if (success)
+            {
+                AddLog("Speech request sent successfully", LogLevel.Success);
+                LastAction = $"Avatar spoke: \"SpeechText.Substring(0, Math.Min(30, SpeechText.Length))...\"";
+            }
+            else
+            {
+                AddLog("Failed to send speech request", LogLevel.Error);
+                LastAction = "Speech request failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog($"Error making avatar speak: {ex.Message}", LogLevel.Error);
+            LastAction = "Speech error";
+        }
+        finally
+        {
+            IsProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CloseStream()
+    {
+        IsProcessing = true;
+        AddLog("Closing avatar stream...", LogLevel.Info);
+        StateHasChanged();
+
+        try
+        {
+            var success = await AvatarService.CloseStreamAsync(CurrentStreamId, CurrentSessionId);
+            
+            if (success)
+            {
+                AddLog("Stream closed successfully", LogLevel.Success);
+                LastAction = "Stream closed";
+            }
+            else
+            {
+                AddLog("Failed to close stream", LogLevel.Warning);
+                LastAction = "Stream close failed";
+            }
+
+            // Reset state
+            CurrentStreamId = string.Empty;
+            CurrentSessionId = string.Empty;
+            IsConnected = false;
+            ConnectionStatus = "Disconnected";
+        }
+        catch (Exception ex)
+        {
+            AddLog($"Error closing stream: {ex.Message}", LogLevel.Error);
+            LastAction = "Stream close error";
+        }
+        finally
+        {
+            IsProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void AddLog(string message, LogLevel level)
+    {
+        Logs.Add(new LogEntry
+        {
+            Timestamp = DateTime.Now,
+            Message = message,
+            Level = level
+        });
+
+        // Keep only last 50 logs
+        if (Logs.Count > 50)
+        {
+            Logs.RemoveAt(0);
+        }
+    }
+
+    private void ClearLogs()
+    {
+        Logs.Clear();
+        StateHasChanged();
+    }
+
+    private string GetStatusBadgeClass()
+    {
+        return ConnectionStatus switch
+        {
+            "Connected" or "Connected (Mock)" => "bg-success",
+            "Stream Created" => "bg-warning",
+            "Disconnected" => "bg-secondary",
+            "Error" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetLogLevelClass(LogLevel level)
+    {
+        return level switch
+        {
+            LogLevel.Success => "text-success",
+            LogLevel.Warning => "text-warning",
+            LogLevel.Error => "text-danger",
+            LogLevel.Info => "text-info",
+            _ => ""
+        };
+    }
+
+    private void SetSpeechText(string text)
+    {
+        SpeechText = text;
+        StateHasChanged();
+    }
+
+    public class LogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public LogLevel Level { get; set; }
+    }
+
+    public enum LogLevel
+    {
+        Info,
+        Success,
+        Warning,
+        Error
+    }
+}

@@ -1,13 +1,114 @@
-// Chat JavaScript Functions for AliveOnD-ID
+// Chat JavaScript Functions for AliveOnD-ID with D-ID WebRTC Integration
 
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingStartTime = null;
 let recordingInterval = null;
 
+// WebRTC variables for D-ID avatar streaming
+let peerConnection = null;
+let streamId = null;
+let sessionId = null;
+
 // Initialize audio recording functionality
 window.initializeAudioRecording = () => {
     console.log('Audio recording initialized');
+};
+
+window.initializeAvatarStream = async (iceServers, streamOffer) => {
+    try {
+        console.log('Initializing avatar stream...');
+        
+        // Create peer connection
+        peerConnection = new RTCPeerConnection({ iceServers });
+        
+        // Set up event listeners
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log('ICE candidate generated:', event.candidate);
+                // Send ICE candidate to server
+                DotNet.invokeMethodAsync('AliveOnD-ID', 'HandleIceCandidate', {
+                    candidate: event.candidate.candidate,
+                    sdpMid: event.candidate.sdpMid,
+                    sdpMLineIndex: event.candidate.sdpMLineIndex
+                });
+            }
+        };
+
+        peerConnection.ontrack = (event) => {
+            console.log('Received remote stream track:', event);
+            console.log('Track kind:', event.track.kind);
+            console.log('Streams:', event.streams);
+            
+            if (event.streams && event.streams[0]) {
+                const remoteStream = event.streams[0];
+                const videoElement = document.getElementById('avatar-video');
+                
+                if (videoElement) {
+                    console.log('Setting video source...');
+                    videoElement.srcObject = remoteStream;
+                    
+                    // Force play
+                    videoElement.play().then(() => {
+                        console.log('Video playing successfully');
+                    }).catch((e) => {
+                        console.error('Error playing video:', e);
+                    });
+                } else {
+                    console.error('Video element not found!');
+                }
+            }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+            console.log('Connection state:', peerConnection.connectionState);
+            
+            // Notify Blazor component of connection state changes
+            DotNet.invokeMethodAsync('AliveOnD-ID', 'HandleConnectionStateChange', peerConnection.connectionState);
+        };
+
+        // Set remote description
+        await peerConnection.setRemoteDescription(streamOffer);
+        
+        // Create and set local description (answer)
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        console.log('Avatar stream initialized successfully');
+        return answer;
+        
+    } catch (error) {
+        console.error('Error initializing avatar stream:', error);
+        throw error;
+    }
+};
+
+
+// Get the SDP answer to send back to D-ID (called from C#)
+window.getSdpAnswer = () => {
+    if (peerConnection && peerConnection.localDescription) {
+        return peerConnection.localDescription;
+    }
+    return null;
+};
+
+// Close WebRTC connection
+window.closeAvatarStream = () => {
+    try {
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        
+        const videoElement = document.getElementById('avatar-video');
+        if (videoElement) {
+            videoElement.srcObject = null;
+        }
+        
+        console.log('Avatar stream closed');
+    } catch (error) {
+        console.error('Error closing avatar stream:', error);
+    }
 };
 
 // Start audio recording
@@ -49,19 +150,9 @@ window.startAudioRecording = async () => {
             // Create audio blob
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             
-            // Convert to base64 for easy transfer to C#
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64Audio = reader.result.split(',')[1]; // Remove data URL prefix
-                
-                // Call C# method to handle the audio data
-                DotNet.invokeMethodAsync('AliveOnD-ID', 'HandleAudioData', {
-                    audioData: base64Audio,
-                    mimeType: 'audio/webm',
-                    duration: Date.now() - recordingStartTime
-                });
-            };
-            reader.readAsDataURL(audioBlob);
+            // For now, just log the audio data
+            // TODO: Implement audio processing
+            console.log('Audio recorded:', audioBlob.size, 'bytes');
         };
 
         // Start recording
@@ -116,7 +207,7 @@ function startRecordingTimer() {
             const seconds = Math.floor((elapsed % 60000) / 1000);
             const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             
-            // Update timer display (this could be improved with a callback)
+            // Update timer display
             const timerElement = document.querySelector('.recording-timer');
             if (timerElement) {
                 timerElement.textContent = timeString;
@@ -190,86 +281,6 @@ window.getAudioRecordingSupport = () => {
     }
 
     return support;
-};
-
-// WebRTC functions for D-ID avatar streaming
-let peerConnection = null;
-let localStream = null;
-
-// Initialize WebRTC connection for avatar
-window.initializeAvatarStream = async (iceServers, streamOffer) => {
-    try {
-        console.log('Initializing avatar stream...');
-        
-        // Create peer connection
-        peerConnection = new RTCPeerConnection({ iceServers });
-        
-        // Set up event listeners
-        peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
-                // Send ICE candidate to server
-                DotNet.invokeMethodAsync('AliveOnD-ID', 'HandleIceCandidate', {
-                    candidate: event.candidate.candidate,
-                    sdpMid: event.candidate.sdpMid,
-                    sdpMLineIndex: event.candidate.sdpMLineIndex
-                });
-            }
-        };
-
-        peerConnection.ontrack = (event) => {
-            console.log('Received remote stream');
-            const remoteStream = event.streams[0];
-            const videoElement = document.getElementById('avatar-video');
-            if (videoElement) {
-                videoElement.srcObject = remoteStream;
-            }
-        };
-
-        peerConnection.onconnectionstatechange = () => {
-            console.log('Connection state:', peerConnection.connectionState);
-            
-            // Notify Blazor component of connection state changes
-            DotNet.invokeMethodAsync('AliveOnD-ID', 'HandleConnectionStateChange', peerConnection.connectionState);
-        };
-
-        // Set remote description
-        await peerConnection.setRemoteDescription(streamOffer);
-        
-        // Create and set local description (answer)
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        
-        console.log('Avatar stream initialized successfully');
-        return answer;
-        
-    } catch (error) {
-        console.error('Error initializing avatar stream:', error);
-        throw error;
-    }
-};
-
-// Close WebRTC connection
-window.closeAvatarStream = () => {
-    try {
-        if (peerConnection) {
-            peerConnection.close();
-            peerConnection = null;
-        }
-        
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            localStream = null;
-        }
-        
-        const videoElement = document.getElementById('avatar-video');
-        if (videoElement) {
-            videoElement.srcObject = null;
-        }
-        
-        console.log('Avatar stream closed');
-    } catch (error) {
-        console.error('Error closing avatar stream:', error);
-    }
 };
 
 // Utility function to convert blob to base64
