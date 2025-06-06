@@ -1,0 +1,187 @@
+// D-ID Stream Manager Class
+class DIDStreamManager {
+    constructor(videoElementId, options = {}) {
+        console.log('Initializing DIDStreamManager...', { videoElementId, options });
+        
+        const videoElement = document.getElementById(videoElementId);
+        if (!videoElement) {
+            throw new Error(`Video element with id '${videoElementId}' not found`);
+        }
+        
+        this.videoElement = videoElement;
+        this.peerConnection = null;
+        this.streamId = null;
+        this.sessionId = null;
+        this.isConnected = false;
+        
+        // Stream options
+        this.options = {
+            compatibilityMode: options.compatibilityMode || "auto",
+            streamWarmup: options.streamWarmup ?? true,
+            sessionTimeout: Math.min(options.sessionTimeout || 300, 300),
+            outputResolution: Math.min(Math.max(options.outputResolution || 720, 150), 1080)
+        };
+        
+        // Set up callback functions by evaluating the string expressions
+        this.callbacks = {
+            onConnectionStateChange: (state) => {
+                try {
+                    if (typeof options.onConnectionStateChange === 'string') {
+                        (new Function('state', options.onConnectionStateChange))(state);
+                    }
+                } catch (error) {
+                    console.error('Error in onConnectionStateChange callback:', error);
+                }
+            },
+            onVideoStateChange: (state) => {
+                try {
+                    if (typeof options.onVideoStateChange === 'string') {
+                        (new Function('state', options.onVideoStateChange))(state);
+                    }
+                } catch (error) {
+                    console.error('Error in onVideoStateChange callback:', error);
+                }
+            },
+            onError: (error, details) => {
+                try {
+                    if (typeof options.onError === 'string') {
+                        (new Function('error, details', options.onError))(error, details);
+                    }
+                } catch (err) {
+                    console.error('Error in onError callback:', err);
+                }
+            }
+        };
+    }
+
+    async connect(streamData) {
+        try {
+            console.log('Connecting to D-ID stream...', streamData);
+
+            if (this.peerConnection) {
+                this.disconnect();
+            }
+
+            this.streamId = streamData.id;
+            this.sessionId = streamData.sessionId;
+
+            // Create and configure peer connection
+            this.peerConnection = new RTCPeerConnection({
+                iceServers: streamData.iceServers
+            });
+
+            // Handle tracks
+            this.peerConnection.ontrack = (event) => {
+                console.log('Received track:', event.track.kind);
+                if (event.streams && event.streams[0]) {
+                    this.onSrcObjectReady(event.streams[0]);
+                }
+            };
+
+            // Handle connection state changes
+            this.peerConnection.onconnectionstatechange = () => {
+                const state = this.peerConnection.connectionState;
+                console.log('Connection state changed:', state);
+                this.callbacks.onConnectionStateChange(state);
+                
+                this.isConnected = state === 'connected';
+            };
+
+            // Set remote description (D-ID's offer)
+            await this.peerConnection.setRemoteDescription(new RTCSessionDescription(streamData.offer));
+
+            // Create and set local description
+            const answer = await this.peerConnection.createAnswer();
+            await this.peerConnection.setLocalDescription(answer);
+
+            console.log('Successfully created WebRTC answer');
+            return answer;
+
+        } catch (error) {
+            console.error('Connection failed:', error);
+            this.callbacks.onError(error);
+            throw error;
+        }
+    }
+
+    onSrcObjectReady(stream) {
+        console.log('Setting video source...');
+        if (this.videoElement && stream) {
+            this.videoElement.srcObject = stream;
+            this.videoElement.play().catch(error => {
+                console.error('Error playing video:', error);
+                this.callbacks.onError(error);
+            });
+        }
+    }
+
+    async sendIceCandidate(candidate) {
+        try {
+            if (this.peerConnection && candidate) {
+                await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+        } catch (error) {
+            console.error('ICE candidate error:', error);
+            this.callbacks.onError(error);
+            throw error;
+        }
+    }
+
+    disconnect() {
+        console.log('Disconnecting D-ID stream...');
+        
+        if (this.videoElement?.srcObject) {
+            const stream = this.videoElement.srcObject;
+            stream.getTracks().forEach(track => {
+                track.stop();
+                console.log('Stopped track:', track.kind);
+            });
+            this.videoElement.srcObject = null;
+        }
+
+        if (this.peerConnection) {
+            this.peerConnection.close();
+            this.peerConnection = null;
+        }
+
+        this.isConnected = false;
+        this.callbacks.onConnectionStateChange('disconnected');
+    }
+}
+
+// Module-level instance
+let instance = null;
+
+// Exported functions for Blazor interop
+export function create(videoElementId, options) {
+    try {
+        console.log('Creating DIDStreamManager...', { videoElementId, options });
+        instance = new DIDStreamManager(videoElementId, options);
+        return true;
+    } catch (error) {
+        console.error('Error creating DIDStreamManager:', error);
+        return false;
+    }
+}
+
+export function connect(streamData) {
+    if (!instance) {
+        throw new Error('DIDStreamManager not initialized. Call create() first.');
+    }
+    return instance.connect(streamData);
+}
+
+export function disconnect() {
+    if (instance) {
+        instance.disconnect();
+        instance = null;
+    }
+    return true;
+}
+
+export function sendIceCandidate(candidate) {
+    if (!instance) {
+        throw new Error('DIDStreamManager not initialized. Call create() first.');
+    }
+    return instance.sendIceCandidate(candidate);
+}
