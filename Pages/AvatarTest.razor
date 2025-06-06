@@ -1,5 +1,6 @@
 @page "/avatar-test"
 @using AliveOnD_ID.Services.Interfaces
+@using AliveOnD_ID.Models
 @inject IAvatarStreamService AvatarService
 @inject IJSRuntime JS
 
@@ -122,11 +123,12 @@
                     <h5>Avatar Video Stream</h5>
                 </div>
                 <div class="card-body text-center">
-                    <div class="avatar-video-container" style="background: #000; border-radius: 8px; position: relative; aspect-ratio: 16/9;">
-                        <video id="avatar-video" 
+                    <div class="avatar-video-container" style="background: #000; border-radius: 8px; position: relative; aspect-ratio: 16/9;">                    <video id="avatar-video" 
                                style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"
                                autoplay 
-                               playsinline 
+                               playsinline
+                               @oncanplay="() => VideoCanPlay()"
+                               @onerror="(e) => VideoError(e)"
                                controls>
                             Your browser does not support the video tag.
                         </video>
@@ -183,11 +185,32 @@
     private bool IsConnected = false;
 
     private List<LogEntry> Logs = new();
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private DotNetObjectReference<AvatarTest> objectReference;
+    private IJSObjectReference module;    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            objectReference = DotNetObjectReference.Create(this);
+            
+            // Load DID Stream Manager module
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/did-stream.js");
+              var result = await module.InvokeAsync<bool>("create", 
+                "avatar-video",
+                new {
+                    compatibilityMode = "auto",
+                    streamWarmup = true,
+                    outputResolution = 720,
+                    onConnectionStateChange = "console.log('Connection state:', state); document.getElementById('connection-state').textContent = state; document.getElementById('connection-state').className = state === 'connected' ? 'badge bg-success' : 'badge bg-secondary';",
+                    onVideoStateChange = "console.log('Video state:', state);",
+                    onError = "console.error('Stream error:', error, details);"
+                });
+            
+            if (!result)
+            {
+                AddLog("Failed to initialize D-ID Stream Manager", LogLevel.Error);
+                return;
+            }
+
             // Check WebRTC support
             await JS.InvokeVoidAsync("eval", @"
                 document.getElementById('webrtc-support').textContent = 
@@ -209,16 +232,37 @@
             var response = await AvatarService.CreateStreamAsync();
             CurrentStreamId = response.Id;
             CurrentSessionId = response.SessionId;
-            ConnectionStatus = "Stream Created";
-            LastAction = "Stream created successfully";
             
-            AddLog($"Stream created: {CurrentStreamId}", LogLevel.Success);
-            AddLog("Note: WebRTC connection setup required for video", LogLevel.Warning);
-            
-            // Note: In a real implementation, you would set up WebRTC here
-            // For testing purposes, we'll mark as connected
-            IsConnected = true;
-            ConnectionStatus = "Connected (Mock)";
+            // Setup WebRTC using DID Stream Manager
+            try {                var answer = await module.InvokeAsync<object>(
+                    "connect",
+                    new { 
+                        id = response.Id,
+                        sessionId = response.SessionId,
+                        offer = response.Offer,
+                        iceServers = response.IceServers 
+                    }
+                );
+                
+                var success = await AvatarService.StartStreamAsync(CurrentStreamId, CurrentSessionId, answer);
+                if (success)
+                {
+                    IsConnected = true;
+                    ConnectionStatus = "Connected";
+                    LastAction = "Stream connected successfully";
+                    AddLog("WebRTC connection established", LogLevel.Success);
+                }
+                else
+                {
+                    AddLog("Failed to establish WebRTC connection", LogLevel.Error);
+                    await CloseStream();
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog($"WebRTC setup error: {ex.Message}", LogLevel.Error);
+                await CloseStream();
+            }
         }
         catch (Exception ex)
         {
@@ -280,9 +324,12 @@
         StateHasChanged();
 
         try
-        {
-            var success = await AvatarService.CloseStreamAsync(CurrentStreamId, CurrentSessionId);
+        {            // Disconnect DID Stream Manager
+            if (module != null)
+            {
+                await module.InvokeVoidAsync("disconnect");
             
+            var success = await AvatarService.CloseStreamAsync(CurrentStreamId, CurrentSessionId);
             if (success)
             {
                 AddLog("Stream closed successfully", LogLevel.Success);
@@ -292,7 +339,7 @@
             {
                 AddLog("Failed to close stream", LogLevel.Warning);
                 LastAction = "Stream close failed";
-            }
+            }            }
 
             // Reset state
             CurrentStreamId = string.Empty;
@@ -309,6 +356,28 @@
         {
             IsProcessing = false;
             StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (module is not null)
+            {
+                await module.DisposeAsync();
+            }
+            
+            objectReference?.Dispose();
+            
+            if (!string.IsNullOrEmpty(CurrentStreamId))
+            {
+                await CloseStream();
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog($"Error during cleanup: {ex.Message}", LogLevel.Error);
         }
     }
 
@@ -362,20 +431,33 @@
     {
         SpeechText = text;
         StateHasChanged();
+    }    // LogEntry and LogLevel moved to Models/LogModels.cs
+
+    private void VideoCanPlay()
+    {
+        AddLog("Video stream is ready to play", LogLevel.Success);
     }
 
-    public class LogEntry
+    private void VideoError(ErrorEventArgs e)
     {
-        public DateTime Timestamp { get; set; }
-        public string Message { get; set; } = string.Empty;
-        public LogLevel Level { get; set; }
-    }
-
-    public enum LogLevel
-    {
-        Info,
-        Success,
-        Warning,
-        Error
+        AddLog("Video playback error occurred", LogLevel.Error);
+        
+        // Try to get the HTMLVideoElement error details via JS
+        _ = Task.Run(async () => {
+            try {
+                await JS.InvokeVoidAsync("eval", @"
+                    const video = document.getElementById('avatar-video');
+                    if (video && video.error) {
+                        console.error('Video error details:', {
+                            code: video.error.code,
+                            message: video.error.message
+                        });
+                    }
+                ");
+            }
+            catch (Exception ex) {
+                AddLog($"Error getting video details: {ex.Message}", LogLevel.Error);
+            }
+        });
     }
 }

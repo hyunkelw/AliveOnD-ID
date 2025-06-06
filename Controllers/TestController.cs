@@ -21,8 +21,9 @@ public class TestController : ControllerBase
     [HttpGet("health")]
     public IActionResult HealthCheck()
     {
-        return Ok(new { 
-            status = "healthy", 
+        return Ok(new
+        {
+            status = "healthy",
             timestamp = DateTime.UtcNow,
             version = "1.0.0"
         });
@@ -230,7 +231,7 @@ public class AvatarController : ControllerBase
         try
         {
             var response = await _avatarService.CreateStreamAsync(
-                request?.PresenterId, 
+                request?.PresenterId,
                 request?.DriverId);
             return Ok(response);
         }
@@ -250,11 +251,11 @@ public class AvatarController : ControllerBase
         try
         {
             var success = await _avatarService.SendTextToAvatarAsync(
-                streamId, 
-                request.SessionId, 
-                request.Text, 
+                streamId,
+                request.SessionId,
+                request.Text,
                 request.Emotion);
-            
+
             if (!success)
             {
                 return BadRequest("Failed to send text to avatar");
@@ -265,6 +266,54 @@ public class AvatarController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending text to avatar stream {StreamId}", streamId);
+            return StatusCode(500, new { error = "Avatar service error", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Start the stream with SDP answer
+    /// </summary>
+    [HttpPost("stream/{streamId}/start")]
+    public async Task<ActionResult> StartStream(string streamId, [FromBody] StartStreamRequest request)
+    {
+        try
+        {
+            var success = await _avatarService.StartStreamAsync(streamId, request.SessionId, request.SdpAnswer);
+
+            if (!success)
+            {
+                return BadRequest("Failed to start stream");
+            }
+
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting stream {StreamId}", streamId);
+            return StatusCode(500, new { error = "Avatar service error", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Send ICE candidate
+    /// </summary>
+    [HttpPost("stream/{streamId}/ice")]
+    public async Task<ActionResult> SendIceCandidate(string streamId, [FromBody] SendIceCandidateRequest request)
+    {
+        try
+        {
+            var success = await _avatarService.SendIceCandidateAsync(streamId, request.SessionId, request.Candidate);
+
+            if (!success)
+            {
+                return BadRequest("Failed to send ICE candidate");
+            }
+
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending ICE candidate for stream {StreamId}", streamId);
             return StatusCode(500, new { error = "Avatar service error", details = ex.Message });
         }
     }
@@ -306,4 +355,16 @@ public class SendTextRequest
     public string SessionId { get; set; } = string.Empty;
     public string Text { get; set; } = string.Empty;
     public string? Emotion { get; set; }
+}
+
+public class StartStreamRequest
+{
+    public string SessionId { get; set; } = string.Empty;
+    public object SdpAnswer { get; set; } = new();
+}
+
+public class SendIceCandidateRequest
+{
+    public string SessionId { get; set; } = string.Empty;
+    public object Candidate { get; set; } = new();
 }

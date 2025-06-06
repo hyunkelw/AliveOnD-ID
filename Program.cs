@@ -134,6 +134,12 @@ if (app.Environment.IsDevelopment())
 app.MapRazorPages();
 app.MapBlazorHub();
 app.MapControllers(); // Add API controllers
+// Serve the avatar chat HTML page
+app.MapGet("/avatar-chat", async (HttpContext context) =>
+{
+    context.Response.ContentType = "text/html";
+    await context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "avatar-chat.html"));
+});
 app.MapFallbackToPage("/_Host");
 
 // Add API endpoints for audio upload and other operations

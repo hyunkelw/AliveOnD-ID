@@ -332,27 +332,51 @@ public async Task<bool> SendTextToAvatarAsync(string streamId, string sessionId,
 
         var endpoint = $"/clips/streams/{streamId}";
         
-        var scriptData = new
+        // Construct script data with proper TTS provider configuration
+        var scriptData = new 
         {
             type = "text",
-            input = text
+            input = text,
+            provider = new 
+            { 
+                type = "microsoft",
+                voice_id = "en-US-JennyNeural",
+                voice_config = new
+                {
+                    rate = "+0%",  // Normal speaking rate
+                    pitch = "+0%"  // Normal pitch
+                }
+            }
         };
 
-        var config = new Dictionary<string, object>
+        // Build configuration with detailed driver settings
+        var configDict = new Dictionary<string, object>
         {
-            ["stitch"] = true
+            ["stitch"] = true,
+            ["driver"] = new 
+            { 
+                loop = false,
+                enable_audio_normalization = true,
+                motion_speed = 0.7,    // Slightly slower for more natural movement
+                silence_padding = 0.2   // Add slight pause between sentences
+            }
         };
 
         if (!string.IsNullOrEmpty(emotion))
         {
-            config["driver_expressions"] = new { expression = emotion };
+            configDict["driver_expressions"] = new { expression = emotion };
         }
+
+        // Only strip the session ID if it's a cookie string
+        var cleanSessionId = sessionId.Contains("AWSALB=") ? 
+            ExtractSessionIdFromCookie(sessionId) : 
+            sessionId;
 
         var requestData = new
         {
             script = scriptData,
-            config = config,
-            session_id = sessionId  // Use as-is
+            config = configDict,
+            session_id = cleanSessionId
         };
 
         var authHeader = $"Basic {_config.ApiKey}";
@@ -361,6 +385,10 @@ public async Task<bool> SendTextToAvatarAsync(string streamId, string sessionId,
         if (success)
         {
             _logger.LogInformation("Text sent successfully to D-ID avatar: {StreamId}", streamId);
+        }
+        else 
+        {
+            _logger.LogWarning("Failed to send text to D-ID avatar: {StreamId}", streamId);
         }
 
         return success;
@@ -571,6 +599,7 @@ public class LLMService : BaseHttpService, ILLMService
 
             // TODO: Replace with your actual LLM API endpoint and format
             var endpoint = "/api/chat/completions"; // Replace with actual endpoint
+
 
             var requestData = new
             {

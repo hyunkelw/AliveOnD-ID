@@ -220,12 +220,6 @@ public class AvatarTestResponse
     public List<IceServer> IceServers { get; set; } = new();
 }
 
-public class StartStreamRequest
-{
-    public string SessionId { get; set; } = string.Empty;
-    public object SdpAnswer { get; set; } = new();
-}
-
 public class IceCandidateRequest
 {
     public string SessionId { get; set; } = string.Empty;
