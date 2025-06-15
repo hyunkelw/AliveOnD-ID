@@ -62,11 +62,23 @@ const elements = {
     recordBtn: document.getElementById('record-btn')
 };
 
+// Update video debug info
+function updateVideoDebug() {
+    const debugSpan = document.getElementById('video-debug');
+    if (debugSpan && elements.video) {
+        const info = `${elements.video.videoWidth}x${elements.video.videoHeight} | Ready: ${elements.video.readyState} | Src: ${elements.video.srcObject ? 'Yes' : 'No'}`;
+        debugSpan.textContent = info;
+    }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     log('Application initialized');
     setupEventListeners();
     createChatSession();
+    
+    // Update video debug info periodically
+    setInterval(updateVideoDebug, 500);
 });
 
 // Event Listeners
@@ -79,16 +91,39 @@ function setupEventListeners() {
     });
     
     // Video element event listeners for debugging
+    elements.video.addEventListener('loadstart', () => {
+        log('Video load started', 'info');
+    });
+    
+    elements.video.addEventListener('loadeddata', () => {
+        log('Video data loaded', 'success');
+    });
+    
     elements.video.addEventListener('loadedmetadata', () => {
-        log('Video metadata loaded', 'success');
+        log(`Video metadata loaded: ${elements.video.videoWidth}x${elements.video.videoHeight}`, 'success');
+    });
+    
+    elements.video.addEventListener('canplay', () => {
+        log('Video can start playing', 'success');
     });
     
     elements.video.addEventListener('playing', () => {
         log('Video is playing', 'success');
     });
     
+    elements.video.addEventListener('waiting', () => {
+        log('Video is waiting for data', 'info');
+    });
+    
+    elements.video.addEventListener('stalled', () => {
+        log('Video stalled', 'error');
+    });
+    
     elements.video.addEventListener('error', (e) => {
-        log(`Video error: ${e.message || 'Unknown error'}`, 'error');
+        const error = elements.video.error;
+        if (error) {
+            log(`Video error: ${error.message} (code: ${error.code})`, 'error');
+        }
     });
 }
 
@@ -131,20 +166,34 @@ async function connectAvatar() {
         elements.connectBtn.disabled = true;
         log('Creating D-ID stream...');
         
-        // Create D-ID stream
+        // Create D-ID stream with additional options based on SDK docs
         const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.createStream}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
+            body: JSON.stringify({
+                // Add stream options that might help
+                compatibilityMode: 'auto',
+                streamWarmup: true
+            })
         });
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
         const streamData = await response.json();
+        
+        // Debug: log the entire response
+        log(`D-ID response: ${JSON.stringify(streamData)}`, 'info');
+        
         state.streamId = streamData.id;
-        state.streamSessionId = streamData.sessionId;
+        // Try both formats since D-ID might return either
+        state.streamSessionId = streamData.session_id || streamData.sessionId;
+        
+        if (!state.streamSessionId) {
+            log('WARNING: No session ID found in response!', 'error');
+        }
         
         log(`Stream created: ${state.streamId}`, 'success');
+        log(`Session ID: ${state.streamSessionId}`, 'info');
         
         // Setup WebRTC
         await setupWebRTC(streamData);
@@ -178,7 +227,7 @@ async function setupWebRTC(streamData) {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            sessionId: state.streamSessionId,
+                            sessionId: state.streamSessionId,  // camelCase for our backend
                             candidate: event.candidate
                         })
                     });
@@ -195,10 +244,32 @@ async function setupWebRTC(streamData) {
         state.peerConnection.ontrack = (event) => {
             log(`Received ${event.track.kind} track`);
             
-            // Only set the video source once, when we get the first stream
-            if (event.streams && event.streams[0] && !elements.video.srcObject) {
+            if (event.track.kind === 'video' && event.streams && event.streams[0]) {
+                // Clear any existing source first
+                elements.video.srcObject = null;
+                
+                // Set the new stream
                 elements.video.srcObject = event.streams[0];
                 log('Video stream attached to element');
+                
+                // Force load
+                elements.video.load();
+                
+                // Try to play after a short delay
+                setTimeout(() => {
+                    elements.video.play().then(() => {
+                        log('Video play started', 'success');
+                    }).catch(e => {
+                        log(`Video play failed: ${e.message}`, 'error');
+                        // Try playing muted if autoplay fails
+                        elements.video.muted = true;
+                        elements.video.play().then(() => {
+                            log('Video playing muted', 'info');
+                        }).catch(e2 => {
+                            log(`Muted play also failed: ${e2.message}`, 'error');
+                        });
+                    });
+                }, 100);
             }
         };
         
@@ -226,7 +297,7 @@ async function setupWebRTC(streamData) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                sessionId: state.streamSessionId,
+                sessionId: state.streamSessionId,  // camelCase for our backend
                 sdpAnswer: answer
             })
         });
@@ -258,7 +329,57 @@ function onConnected() {
     addMessage('Avatar connected! You can now start chatting.', 'system');
     log('Avatar connected successfully', 'success');
     
-    // Debug video element state
+    // Send initial greeting to trigger video stream
+    setTimeout(async () => {
+        log('Sending greeting to activate avatar...');
+        log(`Using session ID: ${state.streamSessionId}`, 'info');
+        
+        if (!state.streamSessionId) {
+            log('ERROR: No session ID available!', 'error');
+            return;
+        }
+        
+        try {
+            const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
+            
+            const requestBody = {
+                session_id: state.streamSessionId,
+                script: {
+                    type: "text",
+                    provider: {
+                        type: "microsoft",
+                        voice_id: "en-US-JennyNeural"
+                    },
+                    input: greetingText,
+                    ssml: false
+                },
+                config: {
+                    stitch: true
+                }
+            };
+            
+            log(`Sending request body: ${JSON.stringify(requestBody)}`, 'info');
+            
+            // D-ID expects the stream endpoint without '/text' suffix
+            const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+            
+            if (response.ok) {
+                log('Greeting sent to avatar', 'success');
+                addMessage(greetingText, 'assistant');
+            } else {
+                const errorText = await response.text();
+                log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
+            }
+        } catch (error) {
+            log(`Greeting error: ${error.message}`, 'error');
+        }
+    }, 1000);
+    
+    // Debug video element state after a delay
     setTimeout(() => {
         if (elements.video.srcObject) {
             const stream = elements.video.srcObject;
@@ -270,7 +391,7 @@ function onConnected() {
         } else {
             log('No srcObject on video element!', 'error');
         }
-    }, 1000);
+    }, 3000);
 }
 
 function onDisconnected() {
@@ -300,6 +421,28 @@ function onDisconnected() {
 
 async function disconnectAvatar() {
     log('Disconnecting avatar...');
+    
+    // Close the D-ID stream properly
+    if (state.streamId && state.streamSessionId) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    session_id: state.streamSessionId  // Note: underscore format
+                })
+            });
+            
+            if (response.ok) {
+                log('Stream closed successfully', 'success');
+            } else {
+                log('Failed to close stream properly', 'error');
+            }
+        } catch (error) {
+            log(`Error closing stream: ${error.message}`, 'error');
+        }
+    }
+    
     onDisconnected();
 }
 
@@ -322,20 +465,31 @@ async function handleSendMessage() {
         // Add assistant message
         addMessage(responseText, 'assistant');
         
-        // Send text to avatar
+        // Send text to avatar using correct D-ID format
         log('Sending text to avatar...');
-        const avatarResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.sendText}/${state.streamId}/text`, {
+        const avatarResponse = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                sessionId: state.streamSessionId,
-                text: responseText,
-                emotion: null
+                session_id: state.streamSessionId,
+                script: {
+                    type: "text",
+                    provider: {
+                        type: "microsoft",
+                        voice_id: "en-US-JennyNeural"  // Default Microsoft voice
+                    },
+                    input: responseText,
+                    ssml: false
+                },
+                config: {
+                    stitch: true
+                }
             })
         });
         
         if (!avatarResponse.ok) {
-            throw new Error('Failed to send text to avatar');
+            const errorText = await avatarResponse.text();
+            throw new Error(`${avatarResponse.status}: ${errorText}`);
         }
         
         log('Text sent to avatar successfully', 'success');

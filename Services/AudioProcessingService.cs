@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using AliveOnD_ID.Models;
 using AliveOnD_ID.Services.Interfaces;
+using AliveOnD_ID.Models.Configurations;
 
 namespace AliveOnD_ID.Services;
 

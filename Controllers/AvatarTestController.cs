@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using AliveOnD_ID.Models;
 using AliveOnD_ID.Services.Interfaces;
 
 namespace AliveOnD_ID.Controllers;
@@ -201,39 +200,4 @@ public class AvatarTestController : ControllerBase
 
         return Ok(new { activeStreams = streams, count = streams.Count });
     }
-}
-
-// Request/Response Models for Avatar Testing
-public class CreateAvatarStreamRequest
-{
-    public string? PresenterId { get; set; }
-    public string? DriverId { get; set; }
-}
-
-public class AvatarTestResponse
-{
-    public string StreamId { get; set; } = string.Empty;
-    public string SessionId { get; set; } = string.Empty;
-    public string TestSessionId { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-    public object Offer { get; set; } = new();
-    public List<IceServer> IceServers { get; set; } = new();
-}
-
-public class IceCandidateRequest
-{
-    public string SessionId { get; set; } = string.Empty;
-    public object Candidate { get; set; } = new();
-}
-
-public class SpeakRequest
-{
-    public string Text { get; set; } = string.Empty;
-    public string SessionId { get; set; } = string.Empty;
-    public string? Emotion { get; set; }
-}
-
-public class CloseStreamRequest
-{
-    public string SessionId { get; set; } = string.Empty;
 }

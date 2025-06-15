@@ -1,0 +1,358 @@
+using Microsoft.Extensions.Options;
+using AliveOnD_ID.Models;
+using AliveOnD_ID.Services.Interfaces;
+using System.Text;
+using System.Text.Json;
+using AliveOnD_ID.Services.Models;
+using AliveOnD_ID.Models.Configurations;
+
+namespace AliveOnD_ID.Services;
+
+public class AvatarStreamService : BaseHttpService, IAvatarStreamService
+{
+    private readonly DIDConfig _config;
+
+    public AvatarStreamService(
+        HttpClient httpClient,
+        IOptions<ServiceConfiguration> config,
+        ILogger<AvatarStreamService> logger) : base(httpClient, logger)
+    {
+        _config = config.Value.DID;
+        _httpClient.BaseAddress = new Uri(_config.BaseUrl);
+        _httpClient.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for streaming
+    }
+
+    public async Task<DIDStreamResponse> CreateStreamAsync(string? presenterId = null, string? driverId = null)
+    {
+        try
+        {
+            _logger.LogInformation("Creating D-ID Clips stream with presenter: {PresenterId}, driver: {DriverId}",
+                presenterId ?? _config.PresenterId, driverId ?? _config.DriverId);
+
+            var endpoint = "/clips/streams";
+            var requestData = new
+            {
+                presenter_id = presenterId ?? _config.PresenterId,
+                driver_id = driverId ?? _config.DriverId
+            };
+
+            var authHeader = $"Basic {_config.ApiKey}";
+
+            // Let's get the raw response first
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            request.Headers.Add("Authorization", authHeader);
+            request.Content = new StringContent(JsonSerializer.Serialize(requestData), Encoding.UTF8, "application/json");
+
+            // _logger.LogDebug("Making request to D-ID: {Endpoint}", endpoint);
+            // var result = await PostJsonAsync<DIDStreamCreateResponse>(endpoint, requestData, authHeader);
+
+            // if (result == null)
+            // {
+            //     throw new InvalidOperationException("D-ID API returned null response");
+            // }
+            // _logger.LogDebug("Raw D-ID response: {Response}", JsonSerializer.Serialize(result));
+
+            // // Convert to our response model
+            // var response = new DIDStreamResponse
+            // {
+            //     Id = result.Id ?? throw new InvalidOperationException("Stream ID is null"),
+            //     SessionId = result.SessionId ?? throw new InvalidOperationException("Session ID is null"),
+            //     Offer = result.Offer ?? new object(),
+            //     IceServers = result.IceServers?.Select(ice => new IceServer
+            //     {
+            //         Urls = ice.Urls,  // Now uses the helper property
+            //         Username = ice.Username,
+            //         Credential = ice.Credential
+            //     }).ToList() ?? new List<IceServer>()
+            // };
+
+            var response = await _httpClient.SendAsync(request);
+            var rawJson = await response.Content.ReadAsStringAsync();
+
+            _logger.LogDebug("Raw D-ID response: {RawResponse}", rawJson);
+            // Now parse it
+            var result = JsonSerializer.Deserialize<DIDStreamCreateResponse>(rawJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
+            {
+                _logger.LogDebug("Set-Cookie headers: {Cookies}", string.Join("; ", cookies));
+            }
+
+            // In AvatarStreamService.CreateStreamAsync method
+            var response_parsed = new DIDStreamResponse
+            {
+                Id = result.Id ?? throw new InvalidOperationException("Stream ID is null"),
+                SessionId = result.SessionId ?? throw new InvalidOperationException("Session ID is null"), // Check both formats
+                Offer = result.Offer ?? new object(),
+                IceServers = result.IceServers?.Select(ice => new IceServer
+                {
+                    Urls = ice.Urls,
+                    Username = ice.Username,
+                    Credential = ice.Credential
+                }).ToList() ?? new List<IceServer>()
+            };
+            _logger.LogInformation("D-ID stream created successfully. StreamId: {StreamId}, SessionId: {SessionId}",
+                response_parsed.Id, response_parsed.SessionId);
+
+            return response_parsed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating D-ID stream");
+            throw;
+        }
+    }
+
+    public async Task<bool> StartStreamAsync(string streamId, string sessionId, object sdpAnswer)
+    {
+        try
+        {
+            _logger.LogInformation("Starting D-ID stream: {StreamId}", streamId);
+            _logger.LogDebug("Using sessionId as-is: {SessionId}", sessionId);
+
+            var endpoint = $"/clips/streams/{streamId}/sdp";
+            var requestData = new
+            {
+                answer = sdpAnswer,
+                session_id = sessionId  // Send exactly as received from D-ID
+            };
+
+            var authHeader = $"Basic {_config.ApiKey}";
+            var success = await PostAsync(endpoint, requestData, authHeader);
+
+            if (success)
+            {
+                _logger.LogInformation("D-ID stream started successfully: {StreamId}", streamId);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to start D-ID stream: {StreamId}", streamId);
+            }
+
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting D-ID stream {StreamId}", streamId);
+            return false;
+        }
+    }
+
+    public async Task<bool> SendIceCandidateAsync(string streamId, string sessionId, object iceCandidate)
+    {
+        try
+        {
+            _logger.LogDebug("Sending ICE candidate for stream: {StreamId}", streamId);
+
+            var endpoint = $"/clips/streams/{streamId}/ice";
+            var requestData = new
+            {
+                candidate = iceCandidate,
+                session_id = sessionId  // Use as-is
+            };
+
+            var authHeader = $"Basic {_config.ApiKey}";
+            return await PostAsync(endpoint, requestData, authHeader);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending ICE candidate for stream {StreamId}", streamId);
+            return false;
+        }
+    }
+
+    public async Task<bool> SendTextToAvatarAsync(string streamId, string sessionId, string text, string? emotion = null)
+    {
+        try
+        {
+            _logger.LogInformation("Sending text to D-ID avatar stream {StreamId}: {Text}", streamId, text);
+
+            var endpoint = $"/clips/streams/{streamId}";
+
+            // Construct script data with proper TTS provider configuration
+            var scriptData = new
+            {
+                type = "text",
+                input = text,
+                provider = new
+                {
+                    type = "microsoft",
+                    voice_id = "en-US-JennyNeural",
+                    voice_config = new
+                    {
+                        rate = "+0%",  // Normal speaking rate
+                        pitch = "+0%"  // Normal pitch
+                    }
+                }
+            };
+
+            // Build configuration with detailed driver settings
+            var configDict = new Dictionary<string, object>
+            {
+                ["stitch"] = true,
+                ["driver"] = new
+                {
+                    loop = false,
+                    enable_audio_normalization = true,
+                    motion_speed = 0.7,    // Slightly slower for more natural movement
+                    silence_padding = 0.2   // Add slight pause between sentences
+                }
+            };
+
+            if (!string.IsNullOrEmpty(emotion))
+            {
+                configDict["driver_expressions"] = new { expression = emotion };
+            }
+
+            // Only strip the session ID if it's a cookie string
+            var cleanSessionId = sessionId.Contains("AWSALB=") ?
+                ExtractSessionIdFromCookie(sessionId) :
+                sessionId;
+
+            var requestData = new
+            {
+                script = scriptData,
+                config = configDict,
+                session_id = cleanSessionId
+            };
+
+            var authHeader = $"Basic {_config.ApiKey}";
+            var success = await PostAsync(endpoint, requestData, authHeader);
+
+            if (success)
+            {
+                _logger.LogInformation("Text sent successfully to D-ID avatar: {StreamId}", streamId);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to send text to D-ID avatar: {StreamId}", streamId);
+            }
+
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending text to avatar stream {StreamId}: {Text}", streamId, text);
+            return false;
+        }
+    }
+
+    // Helper method to extract session ID from AWS cookie
+    private string ExtractSessionIdFromCookie(string cookieString)
+    {
+        try
+        {
+            _logger.LogDebug("Extracting session ID from: {CookieString}", cookieString);
+
+            // If it's already a simple session ID, return as-is
+            if (!cookieString.Contains("AWSALB="))
+            {
+                _logger.LogDebug("No AWSALB found, returning as-is: {SessionId}", cookieString);
+                return cookieString;
+            }
+
+            // Extract the AWSALB value from the cookie string
+            var awsAlbStart = cookieString.IndexOf("AWSALB=") + 7;
+            var awsAlbEnd = cookieString.IndexOf(";", awsAlbStart);
+
+            if (awsAlbEnd == -1)
+            {
+                awsAlbEnd = cookieString.Length;
+            }
+
+            var sessionValue = cookieString.Substring(awsAlbStart, awsAlbEnd - awsAlbStart);
+            _logger.LogInformation("Extracted session ID: '{ExtractedSessionId}' from cookie", sessionValue);
+            return sessionValue;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to extract session ID from cookie: {CookieString}", cookieString);
+            return cookieString;
+        }
+    }
+
+    public async Task<bool> SendAudioToAvatarAsync(string streamId, string sessionId, string audioUrl)
+    {
+        try
+        {
+            _logger.LogInformation("Sending audio to D-ID avatar stream {StreamId}: {AudioUrl}", streamId, audioUrl);
+
+            // Extract just the session ID value from the cookie string
+            var cleanSessionId = ExtractSessionIdFromCookie(sessionId);
+
+            var endpoint = $"/clips/streams/{streamId}";
+            var requestData = new
+            {
+                script = new
+                {
+                    type = "audio",
+                    audio_url = audioUrl
+                },
+                config = new
+                {
+                    stitch = true
+                },
+                session_id = cleanSessionId
+            };
+
+            var authHeader = $"Basic {_config.ApiKey}";
+            var success = await PostAsync(endpoint, requestData, authHeader);
+
+            if (success)
+            {
+                _logger.LogInformation("Audio sent successfully to D-ID avatar: {StreamId}", streamId);
+            }
+
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending audio to avatar stream {StreamId}", streamId);
+            return false;
+        }
+    }
+
+    public async Task<bool> CloseStreamAsync(string streamId, string sessionId)
+    {
+        try
+        {
+            _logger.LogInformation("Closing D-ID stream: {StreamId}", streamId);
+
+            // Extract just the session ID value from the cookie string
+            var cleanSessionId = ExtractSessionIdFromCookie(sessionId);
+
+            var endpoint = $"/clips/streams/{streamId}";
+            var requestData = new
+            {
+                session_id = cleanSessionId
+            };
+
+            var request = new HttpRequestMessage(HttpMethod.Delete, endpoint);
+            request.Headers.Add("Authorization", $"Basic {_config.ApiKey}");
+
+            if (requestData != null)
+            {
+                var jsonContent = JsonSerializer.Serialize(requestData);
+                request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            }
+
+            var response = await _httpClient.SendAsync(request);
+            var success = response.IsSuccessStatusCode;
+
+            if (success)
+            {
+                _logger.LogInformation("D-ID stream closed successfully: {StreamId}", streamId);
+            }
+
+            return success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error closing avatar stream {StreamId}", streamId);
+            return false;
+        }
+    }
+}

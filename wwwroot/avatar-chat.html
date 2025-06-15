@@ -252,7 +252,10 @@
             <div class="status-badge status-disconnected" id="status">
                 Disconnected
             </div>
-            <video id="avatar-video" autoplay playsinline controls></video>
+            <video id="avatar-video" autoplay playsinline muted></video>
+            <div style="position: absolute; bottom: 10px; left: 10px; color: white; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px; font-size: 12px;">
+                Video Debug: <span id="video-debug">Waiting...</span>
+            </div>
         </div>
 
         <!-- Chat Section -->
