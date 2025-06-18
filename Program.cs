@@ -1,4 +1,5 @@
 using AliveOnD_ID.Models;
+using AliveOnD_ID.Models.Configurations;
 using AliveOnD_ID.Services;
 using AliveOnD_ID.Services.Interfaces;
 

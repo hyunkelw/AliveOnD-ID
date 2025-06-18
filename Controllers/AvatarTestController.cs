@@ -97,7 +97,12 @@ public class AvatarTestController : ControllerBase
                 return NotFound("Test session not found");
             }
 
-            var success = await _avatarService.SendIceCandidateAsync(streamId, request.SessionId, request.Candidate);
+            var success = await _avatarService.SendIceCandidateAsync(
+                streamId, 
+                request.SessionId, 
+                request.Candidate,
+                request.Mid,
+                request.LineIndex);
             
             if (!success)
             {

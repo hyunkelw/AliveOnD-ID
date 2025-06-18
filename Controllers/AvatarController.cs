@@ -57,11 +57,15 @@ public class AvatarController : ControllerBase
                 return BadRequest("Missing required field: script.input");
             }
 
-            var success = await _avatarService.SendTextToAvatarAsync(
-                streamId,
-                request.SessionId,
-                request.Script.Input,
-                null); // emotion can be extracted from provider if needed
+            // var success = await _avatarService.SendTextToAvatarAsync(
+            //     streamId,
+            //     request.SessionId,
+            //     request.Script.Input,
+            //     null); // emotion can be extracted from provider if needed
+
+            var result = await _avatarService.CreateClipStream(streamId, request.SessionId, request.Script.Input);
+            _logger.LogInformation("Script sent to avatar stream {StreamId} with result: {Result}", streamId, result);
+            var success = true;
 
             if (!success)
             {
@@ -128,12 +132,17 @@ public class AvatarController : ControllerBase
                 return BadRequest("Missing required field: sessionId");
             }
 
-            if (request.Candidate == null)
+            if (string.IsNullOrEmpty(request.Candidate))
             {
                 return BadRequest("Missing required field: candidate");
             }
 
-            var success = await _avatarService.SendIceCandidateAsync(streamId, request.SessionId, request.Candidate);
+            var success = await _avatarService.SendIceCandidateAsync(
+                streamId,
+                request.SessionId,
+                request.Candidate,
+                request.Mid,
+                request.LineIndex);
 
             if (!success)
             {

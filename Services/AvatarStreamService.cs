@@ -141,7 +141,7 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
         }
     }
 
-    public async Task<bool> SendIceCandidateAsync(string streamId, string sessionId, object iceCandidate)
+    public async Task<bool> SendIceCandidateAsync(string streamId, string sessionId, string candidate, string mid, int lineIndex)
     {
         try
         {
@@ -150,8 +150,10 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             var endpoint = $"/clips/streams/{streamId}/ice";
             var requestData = new
             {
-                candidate = iceCandidate,
-                session_id = sessionId  // Use as-is
+                candidate = candidate,
+                session_id = sessionId,
+                sdpMid = mid,
+                sdpMLineIndex = lineIndex
             };
 
             var authHeader = $"Basic {_config.ApiKey}";
@@ -220,6 +222,23 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             };
 
             var authHeader = $"Basic {_config.ApiKey}";
+
+            // // Debug: Log what you're sending
+            // var jsonContent = JsonConvert.SerializeObject(requestBody);
+            // Console.WriteLine($"URL: {url}");
+            // Console.WriteLine($"Request Body: {jsonContent}");
+            // var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            // client.DefaultRequestHeaders.Add("Authorization", $"Basic {apiKey}");
+            // var response = await client.PostAsync(url, content);
+            // var responseContent = await response.Content.ReadAsStringAsync();
+            // if (!response.IsSuccessStatusCode)
+            // {
+            //     Console.WriteLine($"Error Status: {response.StatusCode}");
+            //     Console.WriteLine($"Error Response: {responseContent}");
+            // }
+            // return responseContent;
+            //  } }
+
             var success = await PostAsync(endpoint, requestData, authHeader);
 
             if (success)
@@ -237,6 +256,43 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
         {
             _logger.LogError(ex, "Error sending text to avatar stream {StreamId}: {Text}", streamId, text);
             return false;
+        }
+    }
+
+    public async Task<string> CreateClipStream(string streamId, string sessionId, string textInput)
+    {
+        using (var client = new HttpClient())
+        {
+            // Make sure you're using the stream_id in the URL, not session_id
+            var url = $"https://api.d-id.com/clips/streams/{streamId}";
+            // Create the request body
+            var requestBody = new
+            {
+                session_id = sessionId,  // session_id goes in the body
+                script = new
+                {
+                    type = "text",
+                    input = textInput
+                },
+                config = new
+                {
+                    stitch = true
+                }
+            };
+            // Debug: Log what you're sending
+            var jsonContent =  Newtonsoft.Json.JsonConvert.SerializeObject(requestBody);
+            Console.WriteLine($"URL: {url}");
+            Console.WriteLine($"Request Body: {jsonContent}");
+            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            client.DefaultRequestHeaders.Add("Authorization", $"Basic {_config.ApiKey}");
+            var response = await client.PostAsync(url, content);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Error Status: {response.StatusCode}");
+                Console.WriteLine($"Error Response: {responseContent}");
+            }
+            return responseContent;
         }
     }
 
@@ -333,11 +389,11 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             var request = new HttpRequestMessage(HttpMethod.Delete, endpoint);
             request.Headers.Add("Authorization", $"Basic {_config.ApiKey}");
 
-            if (requestData != null)
-            {
-                var jsonContent = JsonSerializer.Serialize(requestData);
-                request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-            }
+            // if (requestData != null)
+            // {
+            //     var jsonContent = JsonSerializer.Serialize(requestData);
+            //     request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            // }
 
             var response = await _httpClient.SendAsync(request);
             var success = response.IsSuccessStatusCode;

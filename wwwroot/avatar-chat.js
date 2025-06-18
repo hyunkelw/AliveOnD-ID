@@ -220,18 +220,20 @@ async function setupWebRTC(streamData) {
         // Setup event handlers
         state.peerConnection.onicecandidate = async (event) => {
             if (event.candidate) {
-                log('ICE candidate generated');
                 try {
-                    // Send ICE candidate to D-ID
+                    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
+                    log(`ICE candidate: ${candidate}\n mid: ${sdpMid}\n lineIndex: ${sdpMLineIndex}`, 'info');
+                    // Send ICE candidate to backend with explicit fields
                     const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}/ice`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            sessionId: state.streamSessionId,  // camelCase for our backend
-                            candidate: event.candidate
+                            sessionId: state.streamSessionId,
+                            candidate: candidate,
+                            mid: sdpMid,
+                            lineIndex: sdpMLineIndex
                         })
                     });
-                    
                     if (!response.ok) {
                         log('Failed to send ICE candidate', 'error');
                     }
@@ -276,11 +278,25 @@ async function setupWebRTC(streamData) {
         state.peerConnection.onconnectionstatechange = () => {
             log(`Connection state: ${state.peerConnection.connectionState}`);
             if (state.peerConnection.connectionState === 'connected') {
-                onConnected();
+                // onConnected();
+                log('Peer connection established', 'success');
             } else if (state.peerConnection.connectionState === 'failed') {
                 onDisconnected();
             }
         };
+
+        state.peerConnection.oniceconnectionstatechange = () => {
+            // log(`ICE connection state: ${state.peerConnection.iceConnectionState}`);
+            if (state.peerConnection.iceConnectionState === 'disconnected' || 
+                state.peerConnection.iceConnectionState === 'failed') {
+                onDisconnected();
+            }
+            else if (state.peerConnection.iceConnectionState === 'connected')
+            {
+                log(`ICE connection state changed: ${state.peerConnection.iceConnectionState}`, 'info');
+                onConnected();
+            }
+        }
         
         // Set remote description (offer from D-ID)
         await state.peerConnection.setRemoteDescription(streamData.offer);
