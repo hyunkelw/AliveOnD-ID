@@ -33,7 +33,8 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             var requestData = new
             {
                 presenter_id = presenterId ?? _config.PresenterId,
-                driver_id = driverId ?? _config.DriverId
+                driver_id = driverId ?? _config.DriverId,
+                stream_warmup = true  // Add this
             };
 
             var authHeader = $"Basic {_config.ApiKey}";
@@ -42,29 +43,6 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
             request.Headers.Add("Authorization", authHeader);
             request.Content = new StringContent(JsonSerializer.Serialize(requestData), Encoding.UTF8, "application/json");
-
-            // _logger.LogDebug("Making request to D-ID: {Endpoint}", endpoint);
-            // var result = await PostJsonAsync<DIDStreamCreateResponse>(endpoint, requestData, authHeader);
-
-            // if (result == null)
-            // {
-            //     throw new InvalidOperationException("D-ID API returned null response");
-            // }
-            // _logger.LogDebug("Raw D-ID response: {Response}", JsonSerializer.Serialize(result));
-
-            // // Convert to our response model
-            // var response = new DIDStreamResponse
-            // {
-            //     Id = result.Id ?? throw new InvalidOperationException("Stream ID is null"),
-            //     SessionId = result.SessionId ?? throw new InvalidOperationException("Session ID is null"),
-            //     Offer = result.Offer ?? new object(),
-            //     IceServers = result.IceServers?.Select(ice => new IceServer
-            //     {
-            //         Urls = ice.Urls,  // Now uses the helper property
-            //         Username = ice.Username,
-            //         Credential = ice.Credential
-            //     }).ToList() ?? new List<IceServer>()
-            // };
 
             var response = await _httpClient.SendAsync(request);
             var rawJson = await response.Content.ReadAsStringAsync();
@@ -218,26 +196,10 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             {
                 script = scriptData,
                 config = configDict,
-                session_id = cleanSessionId
+                session_id = sessionId
             };
 
             var authHeader = $"Basic {_config.ApiKey}";
-
-            // // Debug: Log what you're sending
-            // var jsonContent = JsonConvert.SerializeObject(requestBody);
-            // Console.WriteLine($"URL: {url}");
-            // Console.WriteLine($"Request Body: {jsonContent}");
-            // var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-            // client.DefaultRequestHeaders.Add("Authorization", $"Basic {apiKey}");
-            // var response = await client.PostAsync(url, content);
-            // var responseContent = await response.Content.ReadAsStringAsync();
-            // if (!response.IsSuccessStatusCode)
-            // {
-            //     Console.WriteLine($"Error Status: {response.StatusCode}");
-            //     Console.WriteLine($"Error Response: {responseContent}");
-            // }
-            // return responseContent;
-            //  } }
 
             var success = await PostAsync(endpoint, requestData, authHeader);
 

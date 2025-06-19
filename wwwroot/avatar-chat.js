@@ -45,6 +45,8 @@ let state = {
     streamId: null,
     streamSessionId: null,
     peerConnection: null,
+    dataChannel: null,      // ADD THIS
+    isStreamReady: false,   // ADD THIS
     isConnected: false,
     isRecording: false,
     mediaRecorder: null,
@@ -206,13 +208,34 @@ async function connectAvatar() {
 }
 
 async function setupWebRTC(streamData) {
-    try {
+     try {
         log('Setting up WebRTC connection...');
         
         // Create peer connection
         state.peerConnection = new RTCPeerConnection({
             iceServers: streamData.iceServers
         });
+        
+        // Add data channel for stream events
+        state.dataChannel = state.peerConnection.createDataChannel('JanusDataChannel');
+        state.isStreamReady = false; // Add this to state
+        
+        // Handle data channel events
+        state.dataChannel.onopen = () => {
+            log('Data channel opened', 'success');
+        };
+        
+        state.dataChannel.onmessage = (event) => {
+            const [eventType, _] = event.data.split(':');
+            log(`Data channel event: ${event.data}`, 'info');
+            
+            if (eventType === 'stream/ready') {
+                log('Stream is ready!', 'success');
+                state.isStreamReady = true;
+                // Now send the greeting
+                sendInitialGreeting();
+            }
+        };
         
         // Store ICE candidates that arrive before we set remote description
         const pendingCandidates = [];
@@ -333,32 +356,16 @@ async function setupWebRTC(streamData) {
     }
 }
 
-function onConnected() {
-    state.isConnected = true;
-    updateStatus('connected');
-    elements.connectBtn.textContent = 'Disconnect';
-    elements.connectBtn.disabled = false;
-    elements.messageInput.disabled = false;
-    elements.sendBtn.disabled = false;
-    elements.recordBtn.disabled = false;
+async function sendInitialGreeting() {
+    if (!state.isStreamReady) {
+        log('Stream not ready yet, waiting...', 'info');
+        return;
+    }
     
-    addMessage('Avatar connected! You can now start chatting.', 'system');
-    log('Avatar connected successfully', 'success');
+    const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
     
-    // Send initial greeting to trigger video stream
-    setTimeout(async () => {
-        log('Sending greeting to activate avatar...');
-        log(`Using session ID: ${state.streamSessionId}`, 'info');
-        
-        if (!state.streamSessionId) {
-            log('ERROR: No session ID available!', 'error');
-            return;
-        }
-        
-        try {
-            const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
-            
-            const requestBody = {
+    // Your existing greeting code here...
+    const requestBody = {
                 session_id: state.streamSessionId,
                 script: {
                     type: "text",
@@ -390,10 +397,74 @@ function onConnected() {
                 const errorText = await response.text();
                 log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
             }
-        } catch (error) {
-            log(`Greeting error: ${error.message}`, 'error');
+}
+
+function onConnected() {
+    state.isConnected = true;
+    updateStatus('connected');
+    elements.connectBtn.textContent = 'Disconnect';
+    elements.connectBtn.disabled = false;
+    elements.messageInput.disabled = false;
+    elements.sendBtn.disabled = false;
+    elements.recordBtn.disabled = false;
+    
+    addMessage('Avatar connected! You can now start chatting.', 'system');
+    log('Avatar connected successfully', 'success');
+    
+     const sendGreetingWhenReady = () => {
+        if (!state.isStreamReady) {
+            log('Waiting for stream to be ready...', 'info');
+            setTimeout(sendGreetingWhenReady, 500); // Check every 500ms
+            return;
         }
-    }, 1000);
+        
+        // Now send the greeting
+        log('Sending greeting to activate avatar...');
+        const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
+        
+        // Your existing greeting sending code here
+        fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: state.streamSessionId,
+                script: {
+                    type: "text",
+                    provider: {
+                        type: "microsoft",
+                        voice_id: "en-US-JennyNeural"
+                    },
+                    input: greetingText,
+                    ssml: false
+                },
+                config: {
+                    stitch: true
+                }
+            })
+        }).then(response => {
+            if (response.ok) {
+                log('Greeting sent to avatar', 'success');
+                addMessage(greetingText, 'assistant');
+            } else {
+                response.text().then(errorText => {
+                    log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
+                });
+            }
+        }).catch(error => {
+            log(`Greeting error: ${error.message}`, 'error');
+        });
+    };
+    
+    // Start checking for readiness
+    sendGreetingWhenReady();
+    
+    // Fallback: force ready after 5 seconds if no stream/ready event
+    setTimeout(() => {
+        if (!state.isStreamReady) {
+            log('Forcing stream ready state after timeout', 'warning');
+            state.isStreamReady = true;
+        }
+    }, 5000);
     
     // Debug video element state after a delay
     setTimeout(() => {
@@ -467,6 +538,12 @@ async function handleSendMessage() {
     const message = elements.messageInput.value.trim();
     if (!message || !state.isConnected) return;
     
+    if (!state.isStreamReady) {
+        log('Stream not ready yet, cannot send message', 'warning');
+        addMessage('Please wait, avatar is still initializing...', 'system');
+        return;
+    }
+
     elements.messageInput.value = '';
     elements.sendBtn.disabled = true;
     
