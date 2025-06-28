@@ -75,22 +75,22 @@ function updateVideoDebug() {
 
 function debugMediaState() {
     log('=== MEDIA STATE DEBUG ===', 'info');
-    
+
     if (elements.video.srcObject) {
         const stream = elements.video.srcObject;
         const audioTracks = stream.getAudioTracks();
         const videoTracks = stream.getVideoTracks();
-        
+
         log(`Stream active: ${stream.active}`, 'info');
         log(`Video element muted: ${elements.video.muted}`, 'info');
         log(`Video element volume: ${elements.video.volume}`, 'info');
         log(`Video element paused: ${elements.video.paused}`, 'info');
-        
+
         log(`Audio tracks: ${audioTracks.length}`, 'info');
         audioTracks.forEach((track, i) => {
             log(`  Audio ${i}: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`, 'info');
         });
-        
+
         log(`Video tracks: ${videoTracks.length}`, 'info');
         videoTracks.forEach((track, i) => {
             log(`  Video ${i}: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`, 'info');
@@ -259,8 +259,6 @@ async function setupWebRTC(streamData) {
             if (eventType === 'stream/ready') {
                 log('Stream is ready!', 'success');
                 state.isStreamReady = true;
-                // Now send the greeting
-                sendInitialGreeting();
             }
         };
 
@@ -340,8 +338,8 @@ async function setupWebRTC(streamData) {
         };
 
         state.peerConnection.ontrack = (event) => {
-    OnTrackReceived(event);
-};
+            OnTrackReceived(event);
+        };
 
         state.peerConnection.onconnectionstatechange = () => {
             log(`Connection state: ${state.peerConnection.connectionState}`);
@@ -566,10 +564,25 @@ async function sendInitialGreeting() {
             input: greetingText,
             ssml: false
         },
+        presenter_config: {
+            crop: {
+                type: "wide",
+                rectangle: {
+                    bottom: 1,
+                    right: 1,
+                    left: 0,
+                    top: 0
+                }
+            }
+        },
+        background: {
+            color: "white"
+        },
         config: {
             stitch: true
         }
     };
+    log(`[W] - [SENDINITIALGREETING] ${JSON.stringify(requestBody)}`);
 
     log(`Sending request body: ${JSON.stringify(requestBody)}`, 'info');
 
@@ -601,12 +614,22 @@ function onConnected() {
     addMessage('Avatar connected! You can now start chatting.', 'system');
     log('Avatar connected successfully', 'success');
 
+    let greetingSent = false;
+
     const sendGreetingWhenReady = () => {
+        if (greetingSent) {
+            log('Greeting already sent, skipping', 'info');
+            return;
+        }
+
         if (!state.isStreamReady) {
             log('Waiting for stream to be ready...', 'info');
             setTimeout(sendGreetingWhenReady, 500); // Check every 500ms
             return;
         }
+
+        // Mark as sent immediately to prevent duplicates
+        greetingSent = true;
 
         // Now send the greeting
         log('Sending greeting to activate avatar...');
@@ -629,6 +652,20 @@ function onConnected() {
                 },
                 config: {
                     stitch: true
+                },
+                presenter_config: {
+                    crop: {
+                        type: "wide",
+                        rectangle: {
+                            bottom: 1,
+                            right: 1,
+                            left: 0,
+                            top: 0
+                        }
+                    }
+                },
+                background: {
+                    color: false
                 }
             })
         }).then(response => {
@@ -764,11 +801,26 @@ async function handleSendMessage() {
                     input: responseText,
                     ssml: false
                 },
+                presenter_config: {
+                    crop: {
+                        type: "wide",
+                        rectangle: {
+                            bottom: 1,
+                            right: 1,
+                            left: 0,
+                            top: 0
+                        }
+                    }
+                },
+                background: {
+                    color: false
+                },
                 config: {
                     stitch: true
                 }
             })
         });
+        log(`[W] - [HANDLEMESSAGE] ${avatarResponse.body}`);
 
         if (!avatarResponse.ok) {
             const errorText = await avatarResponse.text();
@@ -892,6 +944,283 @@ function checkWebRTCSupport() {
         elements.connectBtn.disabled = true;
     }
 }
+
+// Add to your state object
+state.speechConfig = null;
+state.recognizer = null;
+state.azureKey = null;  // We'll set this securely
+state.azureRegion = null;
+
+// Azure Speech configuration
+async function setupAzureSpeech() {
+    try {
+        // For demo, you could hardcode these, but for production, 
+        // fetch from your backend to keep keys secure
+        const config = await fetchSpeechConfig();  // Implement this to get keys from backend
+
+        state.azureKey = config.key;
+        state.azureRegion = config.region;
+
+        state.speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+            state.azureKey,
+            state.azureRegion
+        );
+
+        // Configure for optimal real-time performance
+        state.speechConfig.speechRecognitionLanguage = "en-US";
+        state.speechConfig.outputFormat = SpeechSDK.OutputFormat.Detailed;
+
+        // Enable punctuation and capitalization
+        state.speechConfig.setServiceProperty(
+            "punctuation",
+            "explicit",
+            SpeechSDK.ServicePropertyChannel.UriQueryParameter
+        );
+
+        log('Azure Speech configured successfully', 'success');
+        return true;
+    } catch (error) {
+        log(`Azure Speech setup failed: ${error.message}`, 'error');
+        return false;
+    }
+}
+
+async function fetchSpeechConfig() {
+    try {
+        log('Fetching Azure Speech configuration from backend...', 'info');
+
+        const response = await fetch(`${API_BASE_URL}/api/speech/config`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const config = await response.json();
+
+        if (!config.key || !config.region) {
+            throw new Error('Invalid speech configuration received');
+        }
+
+        log(`Speech config received for region: ${config.region}`, 'success');
+        return config;
+
+    } catch (error) {
+        log(`Failed to fetch speech config: ${error.message}`, 'error');
+        throw error;
+    }
+}
+
+// Update the setupAzureSpeech function to handle errors better:
+async function setupAzureSpeech() {
+    try {
+        // Fetch credentials from your C# backend
+        const config = await fetchSpeechConfig();
+
+        state.azureKey = config.key;
+        state.azureRegion = config.region;
+
+        // Ensure the Speech SDK is loaded
+        if (typeof SpeechSDK === 'undefined') {
+            throw new Error('Azure Speech SDK not loaded. Please check your script include.');
+        }
+
+        state.speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+            state.azureKey,
+            state.azureRegion
+        );
+
+        // Configure for optimal real-time performance
+        state.speechConfig.speechRecognitionLanguage = "en-US";
+        state.speechConfig.outputFormat = SpeechSDK.OutputFormat.Detailed;
+
+        // Enable punctuation and capitalization
+        state.speechConfig.setServiceProperty(
+            "punctuation",
+            "explicit",
+            SpeechSDK.ServicePropertyChannel.UriQueryParameter
+        );
+
+        log('Azure Speech configured successfully', 'success');
+        elements.recordBtn.title = 'Click to start voice input';
+        return true;
+
+    } catch (error) {
+        log(`Azure Speech setup failed: ${error.message}`, 'error');
+
+        // Disable the record button if setup fails
+        elements.recordBtn.disabled = true;
+        elements.recordBtn.title = 'Speech recognition not available';
+
+        return false;
+    }
+}
+
+// Also update your initialization to handle the async setup properly:
+document.addEventListener('DOMContentLoaded', async () => {
+    log('Application initialized');
+    setupEventListeners();
+    createChatSession();
+
+    // Setup Azure Speech asynchronously
+    try {
+        await setupAzureSpeech();
+    } catch (error) {
+        log('Speech services will not be available', 'warning');
+    }
+
+    setInterval(updateVideoDebug, 500);
+});
+
+// Modified recording functions with Azure Speech
+async function startRecording() {
+    try {
+        if (!state.speechConfig) {
+            const configured = await setupAzureSpeech();
+            if (!configured) {
+                alert('Speech recognition not configured');
+                return;
+            }
+        }
+
+        log('Starting Azure Speech recognition...', 'info');
+
+        // Create audio config from default microphone
+        const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+
+        // Create recognizer
+        state.recognizer = new SpeechSDK.SpeechRecognizer(
+            state.speechConfig,
+            audioConfig
+        );
+
+        // Track interim results
+        let currentTranscript = '';
+
+        // Real-time transcription (interim results)
+        state.recognizer.recognizing = (s, e) => {
+            if (e.result.reason === SpeechSDK.ResultReason.RecognizingSpeech) {
+                currentTranscript = e.result.text;
+                elements.messageInput.value = currentTranscript + '...';
+                log(`Recognizing: ${currentTranscript}`, 'info');
+            }
+        };
+
+        // Final results
+        state.recognizer.recognized = (s, e) => {
+            if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                currentTranscript = e.result.text;
+                elements.messageInput.value = currentTranscript;
+                log(`Recognized: ${currentTranscript}`, 'success');
+
+                // Auto-send option (comment out if you don't want this)
+                if (currentTranscript.trim() && state.isConnected) {
+                    setTimeout(() => {
+                        if (!state.isRecording) {  // Only auto-send if stopped recording
+                            handleSendMessage();
+                        }
+                    }, 500);
+                }
+            } else if (e.result.reason === SpeechSDK.ResultReason.NoMatch) {
+                log('No speech recognized', 'warning');
+            }
+        };
+
+
+        // Handle errors
+        state.recognizer.canceled = (s, e) => {
+            log(`Recognition canceled: ${e.reason}`, 'error');
+            if (e.reason === SpeechSDK.CancellationReason.Error) {
+                log(`Error details: ${e.errorDetails}`, 'error');
+            }
+            stopRecording();
+        };
+
+        // Start continuous recognition
+        state.recognizer.startContinuousRecognitionAsync(
+            () => {
+                state.isRecording = true;
+                elements.recordBtn.classList.add('recording');
+                elements.recordBtn.textContent = '⏹️ Stop';
+                log('Azure recognition started', 'success');
+            },
+            (error) => {
+                log(`Failed to start: ${error}`, 'error');
+                stopRecording();
+            }
+        );
+
+    } catch (error) {
+        log(`Recording failed: ${error.message}`, 'error');
+        alert('Microphone access denied or Azure Speech not configured');
+    }
+}
+
+function stopRecording() {
+    if (state.recognizer && state.isRecording) {
+        state.recognizer.stopContinuousRecognitionAsync(
+            () => {
+                state.isRecording = false;
+                elements.recordBtn.classList.remove('recording');
+                elements.recordBtn.textContent = '🎤 Record';
+                log('Recognition stopped', 'info');
+
+                // Clean up
+                state.recognizer.close();
+                state.recognizer = null;
+
+                // Auto-send the transcribed text if any
+                const transcribedText = elements.messageInput.value.trim();
+                if (transcribedText && state.isConnected) {
+                    log(`Auto-sending transcribed text: ${transcribedText}`, 'info');
+                    // Small delay to ensure everything is cleaned up
+                    setTimeout(() => {
+                        handleSendMessage();
+                    }, 100);
+                    if (transcribedText && state.isConnected) {
+                        // Visual feedback that message is being sent
+                        elements.messageInput.disabled = true;
+                        elements.messageInput.style.opacity = '0.5';
+
+                        setTimeout(() => {
+                            handleSendMessage();
+                            // Re-enable after sending
+                            setTimeout(() => {
+                                elements.messageInput.disabled = false;
+                                elements.messageInput.style.opacity = '1';
+                            }, 200);
+                        }, 100);
+                    }
+                } else if (!transcribedText) {
+                    log('No text to send', 'info');
+                } else if (!state.isConnected) {
+                    log('Cannot send - avatar not connected', 'warning');
+                }
+            },
+            (error) => {
+                log(`Stop error: ${error}`, 'error');
+                state.isRecording = false;
+                elements.recordBtn.classList.remove('recording');
+                elements.recordBtn.textContent = '🎤 Record';
+            }
+        );
+    }
+}
+
+
+// Update your initialization
+document.addEventListener('DOMContentLoaded', () => {
+    log('Application initialized');
+    setupEventListeners();
+    createChatSession();
+    setupAzureSpeech();  // Add this
+
+    setInterval(updateVideoDebug, 500);
+});
 
 // Check support on load
 checkWebRTCSupport();

@@ -166,6 +166,29 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
                         rate = "+0%",  // Normal speaking rate
                         pitch = "+0%"  // Normal pitch
                     }
+                },
+                config = new
+                {
+                    logo = false,
+                    result_format = "mp4"
+                },
+                presenter_config = new
+                {
+                    crop = new
+                    {
+                        type = "wide",
+                        rectangle = new
+                        {
+                            bottom = 1,
+                            right = 1,
+                            left = 0,
+                            top = 0
+                        }
+                    }
+                },
+                background = new
+                {
+                    color = false
                 }
             };
 
@@ -242,7 +265,7 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
                 }
             };
             // Debug: Log what you're sending
-            var jsonContent =  Newtonsoft.Json.JsonConvert.SerializeObject(requestBody);
+            var jsonContent = Newtonsoft.Json.JsonConvert.SerializeObject(requestBody);
             Console.WriteLine($"URL: {url}");
             Console.WriteLine($"Request Body: {jsonContent}");
             var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");

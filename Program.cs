@@ -9,12 +9,25 @@ var servicesSection = builder.Configuration.GetSection("Services");
 var didSection = servicesSection.GetSection("DID");
 var apiKeySetting = didSection["ApiKey"];
 
+// Substitute the D-ID API key setting with the value in the environment variable if available
 if (!string.IsNullOrEmpty(apiKeySetting))
 {
-     var envValue = Environment.GetEnvironmentVariable(apiKeySetting);
-    if (!string.IsNullOrEmpty(envValue))
+    var d_IdKeyValue = Environment.GetEnvironmentVariable(apiKeySetting);
+    if (!string.IsNullOrEmpty(d_IdKeyValue))
     {
-        builder.Configuration["Services:DID:ApiKey"] = envValue;
+        builder.Configuration["Services:DID:ApiKey"] = d_IdKeyValue;
+    }
+}
+
+// Substitute the AZURE SPEECH API key setting with the value in the environment variable if available
+var azureSection = servicesSection.GetSection("AzureSpeechServices");
+if (!string.IsNullOrEmpty(azureSection["Key"]))
+{
+    var speechKey = azureSection["Key"];
+    var speechKeyValue = Environment.GetEnvironmentVariable(speechKey);
+    if (!string.IsNullOrEmpty(speechKeyValue))
+    {
+        builder.Configuration["Services:AzureSpeechServices:Key"] = speechKeyValue;
     }
 }
 
