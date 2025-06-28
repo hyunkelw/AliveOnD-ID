@@ -17,4 +17,11 @@
     <PackageReference Include="System.Text.Json" Version="9.0.5" />
   </ItemGroup>
 
+  <!-- Configure static files -->
+  <ItemGroup>
+    <Content Update="wwwroot\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
