@@ -8,6 +8,6 @@ public class ChatMessage
     public string Content { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     public MessageStatus Status { get; set; } = MessageStatus.Pending;
-    public string? AudioUrl { get; set; }
+    public string? Emotion { get; set; }
     public string? ErrorMessage { get; set; }
 }

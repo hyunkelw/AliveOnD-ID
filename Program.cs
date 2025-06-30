@@ -5,34 +5,53 @@ using AliveOnD_ID.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// load configuration from appsettings.json and environment variables
 var servicesSection = builder.Configuration.GetSection("Services");
+
+var asrSection = servicesSection.GetSection("AzureSpeechServices");
+var llmSection = servicesSection.GetSection("LLM");
 var didSection = servicesSection.GetSection("DID");
-var apiKeySetting = didSection["ApiKey"];
+
+var didKeySetting = didSection["ApiKey"];
+var asrKeySetting = asrSection["ApiKey"];
+var llmKeySetting = llmSection["ApiKey"];
 
 // Substitute the D-ID API key setting with the value in the environment variable if available
-if (!string.IsNullOrEmpty(apiKeySetting))
+if (!string.IsNullOrEmpty(didKeySetting))
 {
-    var d_IdKeyValue = Environment.GetEnvironmentVariable(apiKeySetting);
-    if (!string.IsNullOrEmpty(d_IdKeyValue))
+    var didKeyValue = Environment.GetEnvironmentVariable(didKeySetting);
+    if (!string.IsNullOrEmpty(didKeyValue))
     {
-        builder.Configuration["Services:DID:ApiKey"] = d_IdKeyValue;
+        builder.Configuration["Services:DID:ApiKey"] = didKeyValue;
     }
 }
 
 // Substitute the AZURE SPEECH API key setting with the value in the environment variable if available
-var azureSection = servicesSection.GetSection("AzureSpeechServices");
-if (!string.IsNullOrEmpty(azureSection["Key"]))
+if (!string.IsNullOrEmpty(asrKeySetting))
 {
-    var speechKey = azureSection["Key"];
-    var speechKeyValue = Environment.GetEnvironmentVariable(speechKey);
-    if (!string.IsNullOrEmpty(speechKeyValue))
+    var asrKeyValue = Environment.GetEnvironmentVariable(asrKeySetting);
+    if (!string.IsNullOrEmpty(asrKeyValue))
     {
-        builder.Configuration["Services:AzureSpeechServices:Key"] = speechKeyValue;
+        builder.Configuration["Services:AzureSpeechServices:ApiKey"] = asrKeyValue;
+    }
+}
+
+// Substitute the EVE API key setting with the value in the environment variable if available
+if (!string.IsNullOrEmpty(llmKeySetting))
+{
+    var llmKeyValue = Environment.GetEnvironmentVariable(llmKeySetting);
+    if (!string.IsNullOrEmpty(llmKeyValue))
+    {
+        builder.Configuration["Services:LLM:ApiKey"] = llmKeyValue;
     }
 }
 
 // Add MVC Controllers for API endpoints
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // Add Swagger/OpenAPI for testing
 builder.Services.AddEndpointsApiExplorer();
@@ -48,18 +67,22 @@ builder.Services.AddSwaggerGen(c =>
 
 // Configure services
 builder.Services.Configure<DIDConfig>(didSection);
-builder.Services.Configure<AudioToTextConfig>(servicesSection.GetSection("AzureSpeechServices"));
+builder.Services.Configure<ASRConfig>(asrSection);
+builder.Services.Configure<LLMConfig>(llmSection);
 builder.Services.Configure<ServiceConfiguration>(servicesSection);
 
 // Add application services
 builder.Services.AddHttpClient();
+// add memoryCache for making the StorageService work
 builder.Services.AddMemoryCache();
-builder.Services.AddScoped<IAvatarStreamService, AvatarStreamService>();
-builder.Services.AddScoped<IAudioToTextService, AudioToTextService>();
-builder.Services.AddScoped<IAudioProcessingService, AudioProcessingService>();
-builder.Services.AddScoped<ILLMService, LLMService>();
-builder.Services.AddScoped<IChatSessionService, ChatSessionService>();
-builder.Services.AddScoped<IStorageService, InMemoryStorageService>();
+
+builder.Services.AddTransient<IAvatarStreamService, AvatarStreamService>();
+builder.Services.AddTransient<IASRService, ASRService>();
+// builder.Services.AddScoped<IAudioProcessingService, AudioProcessingService>();
+// builder.Services.AddScoped<ILLMService, LLMService>();
+builder.Services.AddSingleton<ILLMService, WebSocketLLMService>();
+builder.Services.AddTransient<IChatSessionService, ChatSessionService>();
+builder.Services.AddTransient<IStorageService, InMemoryStorageService>();
 
 var app = builder.Build();
 

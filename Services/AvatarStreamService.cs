@@ -3,8 +3,8 @@ using AliveOnD_ID.Models;
 using AliveOnD_ID.Services.Interfaces;
 using System.Text;
 using System.Text.Json;
-using AliveOnD_ID.Services.Models;
 using AliveOnD_ID.Models.Configurations;
+using AliveOnD_ID.Controllers.Responses;
 
 namespace AliveOnD_ID.Services;
 

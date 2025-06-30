@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using AliveOnD_ID.Models;
 using AliveOnD_ID.Services.Interfaces;
 using AliveOnD_ID.Models.Configurations;
+using AliveOnD_ID.Controllers.Responses;
 
 namespace AliveOnD_ID.Services;
 
@@ -57,7 +58,7 @@ public class LLMService : BaseHttpService, ILLMService
     {
         // For now, this just calls the main method without additional context
         // You can extend this to fetch conversation history based on sessionId
-        return await GetResponseAsync(userMessage, (List<ChatMessage>?)null);
+        return await GetResponseAsync(userMessage, null);
     }
 
     private object[] BuildMessageHistory(string userMessage, List<ChatMessage>? conversationHistory)

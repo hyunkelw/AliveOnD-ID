@@ -1,4 +1,4 @@
-using AliveOnD_ID.Models;
+using AliveOnD_ID.Controllers.Responses;
 
 namespace AliveOnD_ID.Services.Interfaces;
 

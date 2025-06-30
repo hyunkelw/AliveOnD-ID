@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using AliveOnD_ID.Models;
 using AliveOnD_ID.Services.Interfaces;
+using AliveOnD_ID.Controllers.Requests;
 
 namespace AliveOnD_ID.Controllers;
 
@@ -50,7 +51,7 @@ public class SessionController : ControllerBase
     /// Get an existing chat session
     /// </summary>
     [HttpGet("{sessionId}")]
-    public async Task<ActionResult<ChatSession>> GetSession(string sessionId)
+    public async Task<ActionResult<ChatSession>> GetSession([FromRoute] string sessionId)
     {
         try
         {
@@ -72,7 +73,7 @@ public class SessionController : ControllerBase
     /// Add a message to a session
     /// </summary>
     [HttpPost("{sessionId}/messages")]
-    public async Task<ActionResult> AddMessage(string sessionId, [FromBody] AddMessageRequest request)
+    public async Task<ActionResult> AddMessage([FromRoute] string sessionId, [FromBody] AddMessageRequest request)
     {
         try
         {
@@ -80,7 +81,7 @@ public class SessionController : ControllerBase
             {
                 Type = request.Type,
                 Content = request.Content,
-                AudioUrl = request.AudioUrl
+                Emotion = request.Emotion
             };
 
             var success = await _sessionService.AddMessageAsync(sessionId, message);
@@ -102,7 +103,7 @@ public class SessionController : ControllerBase
     /// Get all sessions for a user
     /// </summary>
     [HttpGet("user/{userId}")]
-    public async Task<ActionResult<List<ChatSession>>> GetUserSessions(string userId)
+    public async Task<ActionResult<List<ChatSession>>> GetUserSessions([FromRoute] string userId)
     {
         try
         {

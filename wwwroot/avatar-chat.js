@@ -31,9 +31,7 @@ const API_ENDPOINTS = {
     getSession: '/api/session',
     addMessage: '/api/session',
     createStream: '/api/avatar/stream/create',
-    startStream: '/api/avatar/stream',  // {streamId}/start
-    sendIce: '/api/avatar/stream',      // {streamId}/ice
-    sendText: '/api/avatar/stream',     // {streamId}/text
+    startStream: '/api/avatar/stream/',  // {streamId}/start
     uploadAudio: '/api/audio/upload',
     testLLM: '/api/llm/test'
 };
@@ -101,10 +99,16 @@ function debugMediaState() {
 }
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     log('Application initialized');
     setupEventListeners();
     createChatSession();
+
+    try {
+        await setupAzureSpeech();
+    } catch (error) {
+        log('Speech services will not be available', 'warning');
+    }
 
     // Update video debug info periodically
     setInterval(updateVideoDebug, 500);
@@ -120,34 +124,13 @@ function setupEventListeners() {
     });
 
     // Video element event listeners for debugging
-    elements.video.addEventListener('loadstart', () => {
-        log('Video load started', 'info');
-    });
-
-    elements.video.addEventListener('loadeddata', () => {
-        log('Video data loaded', 'success');
-    });
-
-    elements.video.addEventListener('loadedmetadata', () => {
-        log(`Video metadata loaded: ${elements.video.videoWidth}x${elements.video.videoHeight}`, 'success');
-    });
-
-    elements.video.addEventListener('canplay', () => {
-        log('Video can start playing', 'success');
-    });
-
-    elements.video.addEventListener('playing', () => {
-        log('Video is playing', 'success');
-    });
-
-    elements.video.addEventListener('waiting', () => {
-        log('Video is waiting for data', 'info');
-    });
-
-    elements.video.addEventListener('stalled', () => {
-        log('Video stalled', 'error');
-    });
-
+    elements.video.addEventListener('loadstart', () => { log('Video load started', 'info'); });
+    elements.video.addEventListener('loadeddata', () => { log('Video data loaded', 'success'); });
+    elements.video.addEventListener('loadedmetadata', () => { log(`Video metadata loaded: ${elements.video.videoWidth}x${elements.video.videoHeight}`, 'success'); });
+    elements.video.addEventListener('canplay', () => { log('Video can start playing', 'success'); });
+    elements.video.addEventListener('playing', () => { log('Video is playing', 'success'); });
+    elements.video.addEventListener('waiting', () => { log('Video is waiting for data', 'info'); });
+    elements.video.addEventListener('stalled', () => { log('Video stalled', 'error'); });
     elements.video.addEventListener('error', (e) => {
         const error = elements.video.error;
         if (error) {
@@ -248,9 +231,7 @@ async function setupWebRTC(streamData) {
         state.isStreamReady = false; // Add this to state
 
         // Handle data channel events
-        state.dataChannel.onopen = () => {
-            log('Data channel opened', 'success');
-        };
+        state.dataChannel.onopen = () => { log('Data channel opened', 'success'); };
 
         state.dataChannel.onmessage = (event) => {
             const [eventType, _] = event.data.split(':');
@@ -272,7 +253,7 @@ async function setupWebRTC(streamData) {
                     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
                     log(`ICE candidate: ${candidate}\n mid: ${sdpMid}\n lineIndex: ${sdpMLineIndex}`, 'info');
                     // Send ICE candidate to backend with explicit fields
-                    const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}/ice`, {
+                    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}/ice`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -374,7 +355,7 @@ async function setupWebRTC(streamData) {
 
         // Send answer to D-ID
         log('Sending answer to D-ID...');
-        const startResponse = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}/start`, {
+        const startResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -383,14 +364,9 @@ async function setupWebRTC(streamData) {
             })
         });
 
-        if (!startResponse.ok) {
-            throw new Error('Failed to start stream');
-        }
+        if (!startResponse.ok) { throw new Error('Failed to start stream'); }
 
         log('Answer sent to D-ID successfully', 'success');
-
-        // The connection state will update automatically
-        // No need for manual timeout
 
     } catch (error) {
         log(`WebRTC setup failed: ${error.message}`, 'error');
@@ -414,9 +390,7 @@ function OnTrackReceived(event) {
         const allTracks = stream.getTracks();
         log(`Total tracks in stream: ${allTracks.length}`, 'info');
 
-        allTracks.forEach((track, index) => {
-            log(`  Track ${index}: ${track.kind} - ${track.label} (enabled: ${track.enabled})`, 'info');
-        });
+        allTracks.forEach((track, index) => { log(`  Track ${index}: ${track.kind} - ${track.label} (enabled: ${track.enabled})`, 'info'); });
 
         // Count audio and video tracks
         const audioTracks = stream.getAudioTracks();
@@ -424,16 +398,12 @@ function OnTrackReceived(event) {
         log(`Stream contains: ${audioTracks.length} audio tracks, ${videoTracks.length} video tracks`, 'info');
 
         // Log detailed audio track info
-        audioTracks.forEach((track, i) => {
-            log(`  Audio Track ${i}: Label="${track.label}", ID="${track.id}", enabled=${track.enabled}, muted=${track.muted}`, 'info');
-        });
+        audioTracks.forEach((track, i) => { log(`  Audio Track ${i}: Label="${track.label}", ID="${track.id}", enabled=${track.enabled}, muted=${track.muted}`, 'info'); });
 
         // Attach the stream to video element only once
         if (!elements.video.srcObject || elements.video.srcObject.id !== stream.id) {
             // Clear any existing source first
-            if (elements.video.srcObject) {
-                log('Replacing existing stream', 'info');
-            }
+            if (elements.video.srcObject) { log('Replacing existing stream', 'info'); }
 
             elements.video.srcObject = stream;
             log('Stream attached to video element', 'success');
@@ -529,78 +499,74 @@ function OnTrackReceived(event) {
     }
 
     // Log specific track type
-    if (event.track.kind === 'video') {
-        log('Video track processing complete', 'success');
-    } else if (event.track.kind === 'audio') {
+    if (event.track.kind === 'video') { log('Video track processing complete', 'success'); }
+    else if (event.track.kind === 'audio') {
         log('Audio track processing complete', 'success');
-
         // Additional audio-specific debugging
         if (event.streams && event.streams[0]) {
             const audioTracks = event.streams[0].getAudioTracks();
-            if (audioTracks.length > 0) {
-                log(`Audio track settings: ${JSON.stringify(audioTracks[0].getSettings())}`, 'info');
-            }
+            if (audioTracks.length > 0) { log(`Audio track settings: ${JSON.stringify(audioTracks[0].getSettings())}`, 'info'); }
         }
     }
 }
 
-async function sendInitialGreeting() {
-    if (!state.isStreamReady) {
-        log('Stream not ready yet, waiting...', 'info');
-        return;
-    }
+//async function sendInitialGreeting() {
+//    if (!state.isStreamReady) {
+//        log('Stream not ready yet, waiting...', 'info');
+//        return;
+//    }
 
-    const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
+//    const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
 
-    // Your existing greeting code here...
-    const requestBody = {
-        session_id: state.streamSessionId,
-        script: {
-            type: "text",
-            provider: {
-                type: "microsoft",
-                voice_id: "en-US-JennyNeural"
-            },
-            input: greetingText,
-            ssml: false
-        },
-        presenter_config: {
-            crop: {
-                type: "wide",
-                rectangle: {
-                    bottom: 1,
-                    right: 1,
-                    left: 0,
-                    top: 0
-                }
-            }
-        },
-        background: {
-            color: "white"
-        },
-        config: {
-            stitch: true
-        }
-    };
-    log(`[W] - [SENDINITIALGREETING] ${JSON.stringify(requestBody)}`);
+//    // Your existing greeting code here...
+//    const requestBody = {
+//        session_id: state.streamSessionId,
+//        script: {
+//            type: "text",
+//            provider: {
+//                type: "microsoft",
+//                voice_id: "en-US-JennyNeural"
+//            },
+//            input: greetingText,
+//            ssml: false
+//        },
+//        presenter_config: {
+//            crop: {
+//                type: "wide",
+//                rectangle: {
+//                    bottom: 1,
+//                    right: 1,
+//                    left: 0,
+//                    top: 0
+//                }
+//            }
+//        },
+//        background: {
+//            color: "white"
+//        },
+//        config: {
+//            stitch: true
+//        }
+//    };
+//    log(`[SENDINITIALGREETING] ${JSON.stringify(requestBody)}`);
 
-    log(`Sending request body: ${JSON.stringify(requestBody)}`, 'info');
+//    log(`Sending request body: ${JSON.stringify(requestBody)}`, 'info');
 
-    // D-ID expects the stream endpoint without '/text' suffix
-    const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-    });
+//    // D-ID expects the stream endpoint without '/text' suffix
+//    const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
+//        method: 'POST',
+//        headers: { 'Content-Type': 'application/json' },
+//        body: JSON.stringify(requestBody)
+//    });
 
-    if (response.ok) {
-        log('Greeting sent to avatar', 'success');
-        addMessage(greetingText, 'assistant');
-    } else {
-        const errorText = await response.text();
-        log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
-    }
-}
+//    if (response.ok) {
+//        log('Greeting sent to avatar', 'success');
+//        addMessage(greetingText, 'assistant');
+//    } else {
+//        const errorText = await response.text();
+//        log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
+//    }
+//}
 
 function onConnected() {
     state.isConnected = true;
@@ -636,7 +602,7 @@ function onConnected() {
         const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
 
         // Your existing greeting sending code here
-        fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
+        fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -739,7 +705,7 @@ async function disconnectAvatar() {
     // Close the D-ID stream properly
     if (state.streamId && state.streamSessionId) {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
+            const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -761,6 +727,7 @@ async function disconnectAvatar() {
 }
 
 // Send Message
+// Updated Send Message function with LLM integration
 async function handleSendMessage() {
     const message = elements.messageInput.value.trim();
     if (!message || !state.isConnected) return;
@@ -778,16 +745,50 @@ async function handleSendMessage() {
     addMessage(message, 'user');
 
     try {
-        // Get LLM response (skip for now due to missing LLM endpoint)
-        log('Skipping LLM call (no endpoint configured)');
-        const responseText = "I understand. This is a test response from the avatar. Your backend is working correctly!";
+        // Call LLM service
+        log('Calling LLM service...');
+        const llmResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.testLLM}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                // Optional: include session context if you want conversation history
+                // sessionId: state.sessionId,
+                // userId: state.userId
+            })
+        });
+
+        if (!llmResponse.ok) {
+            throw new Error(`LLM error: ${llmResponse.status}`);
+        }
+
+        const llmData = await llmResponse.json();
+
+        // Extract the response text and emotion
+        const responseText = llmData.text || llmData.response || "I'm sorry, I couldn't process that.";
+        const emotion = llmData.emotion || "neutral"; // EVE provides emotion data
+
+        log(`LLM response received: ${responseText} (emotion: ${emotion})`, 'success');
 
         // Add assistant message
         addMessage(responseText, 'assistant');
 
-        // Send text to avatar using correct D-ID format
-        log('Sending text to avatar...');
-        const avatarResponse = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
+        // Send text to avatar with emotion-aware voice selection
+        log('Sending text to avatar with emotion...');
+
+        // Map emotions to appropriate voice characteristics
+        const voiceMapping = {
+            'happy': { voice: 'en-US-JennyNeural', style: 'cheerful' },
+            'sad': { voice: 'en-US-JennyNeural', style: 'sad' },
+            'angry': { voice: 'en-US-JennyNeural', style: 'angry' },
+            'neutral': { voice: 'en-US-JennyNeural', style: 'neutral' },
+            'excited': { voice: 'en-US-JennyNeural', style: 'excited' },
+            'calm': { voice: 'en-US-JennyNeural', style: 'calm' }
+        };
+
+        const voiceConfig = voiceMapping[emotion] || voiceMapping['neutral'];
+
+        const avatarResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -796,10 +797,10 @@ async function handleSendMessage() {
                     type: "text",
                     provider: {
                         type: "microsoft",
-                        voice_id: "en-US-JennyNeural"  // Default Microsoft voice
+                        voice_id: voiceConfig.voice
                     },
                     input: responseText,
-                    ssml: false
+                    ssml: wrapInSSML(responseText, voiceConfig.style) // Use SSML for emotion
                 },
                 presenter_config: {
                     crop: {
@@ -820,30 +821,98 @@ async function handleSendMessage() {
                 }
             })
         });
-        log(`[W] - [HANDLEMESSAGE] ${avatarResponse.body}`);
 
         if (!avatarResponse.ok) {
             const errorText = await avatarResponse.text();
-            throw new Error(`${avatarResponse.status}: ${errorText}`);
+            throw new Error(`Avatar error: ${avatarResponse.status}: ${errorText}`);
         }
 
-        log('Text sent to avatar successfully', 'success');
+        log('Text sent to avatar successfully with emotion styling', 'success');
+
+        // Store conversation in session (if implemented)
+        if (state.sessionId) {
+            storeMessageInSession(message, 'user');
+            storeMessageInSession(responseText, 'assistant', emotion);
+        }
 
     } catch (error) {
         log(`Message send failed: ${error.message}`, 'error');
-        addMessage('Failed to send message', 'system');
+
+        // Provide user-friendly error messages
+        if (error.message.includes('LLM error')) {
+            addMessage('Sorry, I\'m having trouble thinking right now. Please try again.', 'system');
+        } else if (error.message.includes('Avatar error')) {
+            addMessage('I understood you, but I\'m having trouble speaking. Here\'s what I wanted to say:', 'system');
+            // Still show the LLM response even if avatar fails
+            if (typeof responseText !== 'undefined') {
+                addMessage(responseText, 'assistant');
+            }
+        } else {
+            addMessage('Failed to send message. Please check your connection.', 'system');
+        }
     } finally {
         elements.sendBtn.disabled = false;
     }
 }
 
+// Helper function to wrap text in SSML for emotion
+function wrapInSSML(text, style) {
+    if (style === 'neutral') {
+        return false; // Don't use SSML for neutral
+    }
+
+    // Microsoft Azure SSML format with style
+    return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" 
+            xmlns:mstts="https://www.w3.org/ns/2001/mstts" xml:lang="en-US">
+        <voice name="en-US-JennyNeural">
+            <mstts:express-as style="${style}">
+                ${escapeXML(text)}
+            </mstts:express-as>
+        </voice>
+    </speak>`;
+}
+
+// Helper function to escape XML special characters
+function escapeXML(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+// Optional: Store messages in session for conversation history
+async function storeMessageInSession(content, role, emotion = null) {
+    try {
+        const messageData = {
+            sessionId: state.sessionId,
+            type: role === 'user' ? 'UserText' : 'AssistantText',
+            content: content,
+            timestamp: new Date().toISOString()
+        };
+
+        if (emotion) {
+            messageData.emotion = emotion;
+        }
+
+        await fetch(`${API_BASE_URL}${API_ENDPOINTS.addMessage}/${state.sessionId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(messageData)
+        });
+
+        log(`Message stored in session: ${role}`, 'info');
+    } catch (error) {
+        log(`Failed to store message: ${error.message}`, 'warning');
+        // Don't fail the main flow if session storage fails
+    }
+}
+
 // Audio Recording
 async function handleRecord() {
-    if (state.isRecording) {
-        stopRecording();
-    } else {
-        startRecording();
-    }
+    if (state.isRecording) { stopRecording(); }
+    else { startRecording(); }
 }
 
 async function startRecording() {
@@ -1060,22 +1129,6 @@ async function setupAzureSpeech() {
     }
 }
 
-// Also update your initialization to handle the async setup properly:
-document.addEventListener('DOMContentLoaded', async () => {
-    log('Application initialized');
-    setupEventListeners();
-    createChatSession();
-
-    // Setup Azure Speech asynchronously
-    try {
-        await setupAzureSpeech();
-    } catch (error) {
-        log('Speech services will not be available', 'warning');
-    }
-
-    setInterval(updateVideoDebug, 500);
-});
-
 // Modified recording functions with Azure Speech
 async function startRecording() {
     try {
@@ -1210,17 +1263,6 @@ function stopRecording() {
         );
     }
 }
-
-
-// Update your initialization
-document.addEventListener('DOMContentLoaded', () => {
-    log('Application initialized');
-    setupEventListeners();
-    createChatSession();
-    setupAzureSpeech();  // Add this
-
-    setInterval(updateVideoDebug, 500);
-});
 
 // Check support on load
 checkWebRTCSupport();

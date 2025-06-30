@@ -1,4 +1,6 @@
+using AliveOnD_ID.Models.Configurations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace AliveOnD_ID.Controllers;
 
@@ -7,12 +9,12 @@ namespace AliveOnD_ID.Controllers;
 [Route("api/speech")]
 public class SpeechController : ControllerBase
 {
-    private readonly IConfiguration _configuration;
+    private readonly ASRConfig _configuration;
     private readonly ILogger<SpeechController> _logger;
 
-    public SpeechController(IConfiguration configuration, ILogger<SpeechController> logger)
+    public SpeechController(IOptions<ASRConfig> configuration, ILogger<SpeechController> logger)
     {
-        _configuration = configuration;
+        _configuration = configuration.Value;
         _logger = logger;
     }
     
@@ -22,8 +24,8 @@ public class SpeechController : ControllerBase
        try
         {
             // Get from appsettings.json or environment variables
-            var key = _configuration["Services:AzureSpeechServices:Key"];
-            var region = _configuration["Services:AzureSpeechServices:Region"];
+            var key = _configuration.ApiKey;
+            var region = _configuration.Region;
             
             if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(region))
             {
