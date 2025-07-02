@@ -12,7 +12,10 @@ public class ProviderData
     public string Type { get; set; } = "microsoft";
     
     [JsonProperty("voice_id")]
-    public string VoiceId { get; set; } = "en-US-JennyNeural";
+    public string? VoiceId { get; set; } // Nullable, set from config
+    
+    [JsonProperty("voice_config")]
+    public object? VoiceConfig { get; set; } // Nullable, set from config or left null
 }
 
 #endregion

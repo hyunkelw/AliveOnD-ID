@@ -98,9 +98,33 @@ function debugMediaState() {
     }
 }
 
+// Microsoft TTS config loaded from backend
+let ttsConfig = {
+    voiceId: 'en-US-JennyNeural',
+    defaultStyle: 'neutral'
+};
+
+// Fetch TTS config from backend
+async function fetchTTSConfig() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/speech/config`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error('Failed to fetch TTS config');
+        const config = await response.json();
+        if (config.voiceId) ttsConfig.voiceId = config.voiceId;
+        if (config.defaultStyle) ttsConfig.defaultStyle = config.defaultStyle;
+        log(`Loaded TTS config: ${JSON.stringify(ttsConfig)}`, 'success');
+    } catch (e) {
+        log('Using default TTS config', 'warning');
+    }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     log('Application initialized');
+    await fetchTTSConfig();
     setupEventListeners();
     createChatSession();
 
@@ -600,8 +624,6 @@ function onConnected() {
         // Now send the greeting
         log('Sending greeting to activate avatar...');
         const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
-
-        // Your existing greeting sending code here
         fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -611,10 +633,10 @@ function onConnected() {
                     type: "text",
                     provider: {
                         type: "microsoft",
-                        voice_id: "en-US-JennyNeural"
+                        voice_id: ttsConfig.voiceId
                     },
                     input: greetingText,
-                    ssml: false
+                    ssml: wrapInSSML(greetingText, ttsConfig.defaultStyle)
                 },
                 config: {
                     stitch: true
@@ -778,15 +800,16 @@ async function handleSendMessage() {
 
         // Map emotions to appropriate voice characteristics
         const voiceMapping = {
-            'happy': { voice: 'en-US-JennyNeural', style: 'cheerful' },
-            'sad': { voice: 'en-US-JennyNeural', style: 'sad' },
-            'angry': { voice: 'en-US-JennyNeural', style: 'angry' },
-            'neutral': { voice: 'en-US-JennyNeural', style: 'neutral' },
-            'excited': { voice: 'en-US-JennyNeural', style: 'excited' },
-            'calm': { voice: 'en-US-JennyNeural', style: 'calm' }
+            'happy': { voice: ttsConfig.voiceId, style: 'cheerful' },
+            'sad': { voice: ttsConfig.voiceId, style: 'sad' },
+            'angry': { voice: ttsConfig.voiceId, style: 'angry' },
+            'neutral': { voice: ttsConfig.voiceId, style: 'neutral' },
+            'excited': { voice: ttsConfig.voiceId, style: 'excited' },
+            'calm': { voice: ttsConfig.voiceId, style: 'calm' }
         };
 
-        const voiceConfig = voiceMapping[emotion] || voiceMapping['neutral'];
+        const voiceConfig = voiceMapping[emotion] || { voice: ttsConfig.voiceId, style: ttsConfig.defaultStyle };
+        log(`TTS DEBUG: Using voiceId='${voiceConfig.voice}' with style='${voiceConfig.style}' for emotion='${emotion}'`, 'info');
 
         const avatarResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
             method: 'POST',
@@ -797,10 +820,10 @@ async function handleSendMessage() {
                     type: "text",
                     provider: {
                         type: "microsoft",
-                        voice_id: voiceConfig.voice
+                        voice_id: voiceConfig.voice || ttsConfig.voiceId
                     },
                     input: responseText,
-                    ssml: wrapInSSML(responseText, voiceConfig.style) // Use SSML for emotion
+                    ssml: wrapInSSML(responseText, voiceConfig.style || ttsConfig.defaultStyle)
                 },
                 presenter_config: {
                     crop: {
@@ -864,7 +887,7 @@ function wrapInSSML(text, style) {
     // Microsoft Azure SSML format with style
     return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" 
             xmlns:mstts="https://www.w3.org/ns/2001/mstts" xml:lang="en-US">
-        <voice name="en-US-JennyNeural">
+        <voice name="${ttsConfig.voiceId}">
             <mstts:express-as style="${style}">
                 ${escapeXML(text)}
             </mstts:express-as>

@@ -11,6 +11,7 @@ namespace AliveOnD_ID.Services;
 public class AvatarStreamService : BaseHttpService, IAvatarStreamService
 {
     private readonly DIDConfig _config;
+    private readonly AzureSpeechServicesConfig _azureSpeechConfig;
 
     public AvatarStreamService(
         HttpClient httpClient,
@@ -18,6 +19,7 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
         ILogger<AvatarStreamService> logger) : base(httpClient, logger)
     {
         _config = config.Value.DID;
+        _azureSpeechConfig = config.Value.AzureSpeechServices;
         _httpClient.BaseAddress = new Uri(_config.BaseUrl);
         _httpClient.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for streaming
     }
@@ -62,10 +64,10 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             // In AvatarStreamService.CreateStreamAsync method
             var response_parsed = new DIDStreamResponse
             {
-                Id = result.Id ?? throw new InvalidOperationException("Stream ID is null"),
-                SessionId = result.SessionId ?? throw new InvalidOperationException("Session ID is null"), // Check both formats
-                Offer = result.Offer ?? new object(),
-                IceServers = result.IceServers?.Select(ice => new IceServer
+                Id = result?.Id ?? string.Empty,
+                SessionId = result?.SessionId ?? string.Empty, // Check both formats
+                Offer = result?.Offer ?? new object(),
+                IceServers = result?.IceServers?.Select(ice => new IceServer
                 {
                     Urls = ice.Urls,
                     Username = ice.Username,
@@ -149,6 +151,7 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
         try
         {
             _logger.LogInformation("Sending text to D-ID avatar stream {StreamId}: {Text}", streamId, text);
+            _logger.LogInformation("Using TTS voice: {VoiceId}, style: {Style}", _azureSpeechConfig.VoiceId, _azureSpeechConfig.DefaultStyle);
 
             var endpoint = $"/clips/streams/{streamId}";
 
@@ -160,11 +163,12 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
                 provider = new
                 {
                     type = "microsoft",
-                    voice_id = "en-US-JennyNeural",
+                    voice_id = _azureSpeechConfig.VoiceId,
                     voice_config = new
                     {
                         rate = "+0%",  // Normal speaking rate
-                        pitch = "+0%"  // Normal pitch
+                        pitch = "+0%",
+                        style = _azureSpeechConfig.DefaultStyle
                     }
                 },
                 config = new
