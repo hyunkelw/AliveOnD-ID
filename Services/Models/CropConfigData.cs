@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace AliveOnD_ID.Services.Models;
 #region Request Models
@@ -8,10 +8,10 @@ namespace AliveOnD_ID.Services.Models;
 /// </summary>
 public class CropConfigData
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "wide";
 
-    [JsonProperty("rectangle")]
+    [JsonPropertyName("rectangle")]
     public RectangleConfigData? Rectangle { get; set; }
 }
 

@@ -8,12 +8,12 @@ var builder = WebApplication.CreateBuilder(args);
 // load configuration from appsettings.json and environment variables
 var servicesSection = builder.Configuration.GetSection("Services");
 
-var asrSection = servicesSection.GetSection("AzureSpeechServices");
+var azureSection = servicesSection.GetSection("AzureSpeechServices");
 var llmSection = servicesSection.GetSection("LLM");
 var didSection = servicesSection.GetSection("DID");
 
 var didKeySetting = didSection["ApiKey"];
-var asrKeySetting = asrSection["ApiKey"];
+var asrKeySetting = azureSection["ApiKey"];
 var llmKeySetting = llmSection["ApiKey"];
 
 // Substitute the D-ID API key setting with the value in the environment variable if available
@@ -67,7 +67,7 @@ builder.Services.AddSwaggerGen(c =>
 
 // Configure services
 builder.Services.Configure<DIDConfig>(didSection);
-builder.Services.Configure<ASRConfig>(asrSection);
+builder.Services.Configure<AzureSpeechServicesConfig>(azureSection);
 builder.Services.Configure<LLMConfig>(llmSection);
 builder.Services.Configure<ServiceConfiguration>(servicesSection);
 

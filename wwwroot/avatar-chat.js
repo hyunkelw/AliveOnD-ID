@@ -97,34 +97,37 @@ function debugMediaState() {
         log('No srcObject attached to video element', 'error');
     }
 }
-
 // Microsoft TTS config loaded from backend
 let ttsConfig = {
     voiceId: 'en-US-JennyNeural',
     defaultStyle: 'neutral'
 };
-
 // Fetch TTS config from backend
-async function fetchTTSConfig() {
+// Fetch both TTS and Speech-to-Text config from backend and update state
+async function fetchSpeechAndTTSConfig() {
     try {
+        log('Fetching Azure Speech and TTS configuration from backend...', 'info');
+
         const response = await fetch(`${API_BASE_URL}/api/speech/config`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
         });
-        if (!response.ok) throw new Error('Failed to fetch TTS config');
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
         const config = await response.json();
-        if (config.voiceId) ttsConfig.voiceId = config.voiceId;
-        if (config.defaultStyle) ttsConfig.defaultStyle = config.defaultStyle;
-        log(`Loaded TTS config: ${JSON.stringify(ttsConfig)}`, 'success');
-    } catch (e) {
-        log('Using default TTS config', 'warning');
+
+        log(`Loaded Azure Speech config: ${JSON.stringify(config)}`, 'success');
+        return config;
+    } catch (error) {
+        log('Using default TTS config and no Azure Speech key/region', 'warning');
+        throw error;
     }
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     log('Application initialized');
-    await fetchTTSConfig();
     setupEventListeners();
     createChatSession();
 
@@ -183,7 +186,7 @@ async function createChatSession() {
 
     } catch (error) {
         log(`Failed to create session: ${error.message}`, 'error');
-        addMessage('Failed to create chat session', 'system');
+        addMessageBubble('Failed to create chat session', 'system');
     }
 }
 
@@ -601,7 +604,7 @@ function onConnected() {
     elements.sendBtn.disabled = false;
     elements.recordBtn.disabled = false;
 
-    addMessage('Avatar connected! You can now start chatting.', 'system');
+    addMessageBubble('Avatar connected! You can now start chatting.', 'system');
     log('Avatar connected successfully', 'success');
 
     let greetingSent = false;
@@ -624,42 +627,65 @@ function onConnected() {
         // Now send the greeting
         log('Sending greeting to activate avatar...');
         const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
+        //fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
+        //    method: 'POST',
+        //    headers: { 'Content-Type': 'application/json' },
+        //    body: JSON.stringify({
+        //        session_id: state.streamSessionId,
+        //        script: {
+        //            type: "text",
+        //            provider: {
+        //                type: "microsoft",
+        //                voice_id: ttsConfig.voiceId,
+        //                voice_config = new
+        //                    {
+        //                        rate = "+0%",  // Normal speaking rate
+        //                        pitch = "+0%",
+        //                        style = _azureSpeechConfig.DefaultStyle
+        //                    }
+        //            },
+        //            input: wrapInSSML(greetingText, ttsConfig.defaultStyle),
+        //            ssml: ttsConfig.defaultStyle !== "neutral" ? false: true // Use SSML only if style is not neutral) 
+        //        },
+        //        config: {
+        //            stitch: true
+        //        },
+        //        presenter_config: {
+        //            crop: {
+        //                type: "wide",
+        //                rectangle: {
+        //                    bottom: 1,
+        //                    right: 1,
+        //                    left: 0,
+        //                    top: 0
+        //                }
+        //            }
+        //        },
+        //        background: {
+        //            color: false
+        //        }
+        //    })
+        //}).then(response => {
+        //    if (response.ok) {
+        //        log('Greeting sent to avatar', 'success');
+        //        addMessageBubble(greetingText, 'assistant');
+        //    } else {
+        //        response.text().then(errorText => {
+        //            log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
+        //        });
+        //    }
+        //}).catch(error => {
+        //    log(`Greeting error: ${error.message}`, 'error');
+        //});
+        const greetingRequest = CreateAvatarScriptRequest(state.streamSessionId, ttsConfig.voiceId, greetingText, ttsConfig.defaultStyle);
         fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: state.streamSessionId,
-                script: {
-                    type: "text",
-                    provider: {
-                        type: "microsoft",
-                        voice_id: ttsConfig.voiceId
-                    },
-                    input: greetingText,
-                    ssml: wrapInSSML(greetingText, ttsConfig.defaultStyle)
-                },
-                config: {
-                    stitch: true
-                },
-                presenter_config: {
-                    crop: {
-                        type: "wide",
-                        rectangle: {
-                            bottom: 1,
-                            right: 1,
-                            left: 0,
-                            top: 0
-                        }
-                    }
-                },
-                background: {
-                    color: false
-                }
-            })
+            body: JSON.stringify(greetingRequest)
         }).then(response => {
             if (response.ok) {
                 log('Greeting sent to avatar', 'success');
-                addMessage(greetingText, 'assistant');
+                addMessageBubble(greetingText, 'assistant');
             } else {
                 response.text().then(errorText => {
                     log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
@@ -668,6 +694,7 @@ function onConnected() {
         }).catch(error => {
             log(`Greeting error: ${error.message}`, 'error');
         });
+
     };
 
     // Start checking for readiness
@@ -717,7 +744,7 @@ function onDisconnected() {
         elements.video.srcObject = null;
     }
 
-    addMessage('Avatar disconnected', 'system');
+    addMessageBubble('Avatar disconnected', 'system');
     log('Avatar disconnected');
 }
 
@@ -756,7 +783,7 @@ async function handleSendMessage() {
 
     if (!state.isStreamReady) {
         log('Stream not ready yet, cannot send message', 'warning');
-        addMessage('Please wait, avatar is still initializing...', 'system');
+        addMessageBubble('Please wait, avatar is still initializing...', 'system');
         return;
     }
 
@@ -764,7 +791,7 @@ async function handleSendMessage() {
     elements.sendBtn.disabled = true;
 
     // Add user message
-    addMessage(message, 'user');
+    addMessageBubble(message, 'user');
 
     try {
         // Call LLM service
@@ -793,7 +820,7 @@ async function handleSendMessage() {
         log(`LLM response received: ${responseText} (emotion: ${emotion})`, 'success');
 
         // Add assistant message
-        addMessage(responseText, 'assistant');
+        addMessageBubble(responseText, 'assistant');
 
         // Send text to avatar with emotion-aware voice selection
         log('Sending text to avatar with emotion...');
@@ -811,39 +838,45 @@ async function handleSendMessage() {
         const voiceConfig = voiceMapping[emotion] || { voice: ttsConfig.voiceId, style: ttsConfig.defaultStyle };
         log(`TTS DEBUG: Using voiceId='${voiceConfig.voice}' with style='${voiceConfig.style}' for emotion='${emotion}'`, 'info');
 
-        const avatarResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                session_id: state.streamSessionId,
-                script: {
-                    type: "text",
-                    provider: {
-                        type: "microsoft",
-                        voice_id: voiceConfig.voice || ttsConfig.voiceId
-                    },
-                    input: responseText,
-                    ssml: wrapInSSML(responseText, voiceConfig.style || ttsConfig.defaultStyle)
-                },
-                presenter_config: {
-                    crop: {
-                        type: "wide",
-                        rectangle: {
-                            bottom: 1,
-                            right: 1,
-                            left: 0,
-                            top: 0
-                        }
-                    }
-                },
-                background: {
-                    color: false
-                },
-                config: {
-                    stitch: true
-                }
-            })
-        });
+        //const avatarResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
+        //    method: 'POST',
+        //    headers: { 'Content-Type': 'application/json' },
+        //    body: JSON.stringify({
+        //        session_id: state.streamSessionId,
+        //        script: {
+        //            type: "text",
+        //            provider: {
+        //                type: "microsoft",
+        //                voice_id: voiceConfig.voice || ttsConfig.voiceId
+        //            },
+        //            input: responseText,
+        //            ssml: wrapInSSML(responseText, voiceConfig.style || ttsConfig.defaultStyle)
+        //        },
+        //        presenter_config: {
+        //            crop: {
+        //                type: "wide",
+        //                rectangle: {
+        //                    bottom: 1,
+        //                    right: 1,
+        //                    left: 0,
+        //                    top: 0
+        //                }
+        //            }
+        //        },
+        //        background: {
+        //            color: false
+        //        },
+        //        config: {
+        //            stitch: true
+        //        }
+        //    })
+        //});
+        const scriptRequest = CreateAvatarScriptRequest(state.streamSessionId, voiceConfig.voice, responseText, voiceConfig.style);
+        const url = `${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`;
+        const avatarResponse = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(scriptRequest)});
 
         if (!avatarResponse.ok) {
             const errorText = await avatarResponse.text();
@@ -863,25 +896,64 @@ async function handleSendMessage() {
 
         // Provide user-friendly error messages
         if (error.message.includes('LLM error')) {
-            addMessage('Sorry, I\'m having trouble thinking right now. Please try again.', 'system');
+            addMessageBubble('Sorry, I\'m having trouble thinking right now. Please try again.', 'system');
         } else if (error.message.includes('Avatar error')) {
-            addMessage('I understood you, but I\'m having trouble speaking. Here\'s what I wanted to say:', 'system');
+            addMessageBubble('I understood you, but I\'m having trouble speaking. Here\'s what I wanted to say:', 'system');
             // Still show the LLM response even if avatar fails
             if (typeof responseText !== 'undefined') {
-                addMessage(responseText, 'assistant');
+                addMessageBubble(responseText, 'assistant');
             }
         } else {
-            addMessage('Failed to send message. Please check your connection.', 'system');
+            addMessageBubble('Failed to send message. Please check your connection.', 'system');
         }
     } finally {
         elements.sendBtn.disabled = false;
     }
 }
 
+// Helper to create POST requests to the avatar stream endpoint
+function CreateAvatarScriptRequest(sessionId, voiceId, inputText, style) {
+    const body = {
+        session_id: sessionId,
+        script: {
+            type: "text",
+            provider: {
+                type: "microsoft",
+                voice_id: voiceId,
+                voice_config: {
+                    rate: "+0%",  // Normal speaking rate
+                    pitch: "+0%",
+                    style: style
+                }
+            },
+            input: wrapInSSML(inputText, style),
+            ssml: style !== 'neutral' // Use SSML only if style is not neutral
+        },
+        presenter_config: {
+            crop: {
+                type: "wide",
+                rectangle: {
+                    bottom: 1,
+                    right: 1,
+                    left: 0,
+                    top: 0
+                }
+            }
+        },
+        background: {
+            color: false
+        },
+        config: {
+            stitch: true
+        }
+    }
+    return body;
+}
+
 // Helper function to wrap text in SSML for emotion
 function wrapInSSML(text, style) {
     if (style === 'neutral') {
-        return false; // Don't use SSML for neutral
+        return text; // Don't use SSML for neutral
     }
 
     // Microsoft Azure SSML format with style
@@ -938,62 +1010,17 @@ async function handleRecord() {
     else { startRecording(); }
 }
 
-async function startRecording() {
-    try {
-        log('Starting audio recording...');
-
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        state.mediaRecorder = new MediaRecorder(stream);
-        state.audioChunks = [];
-
-        state.mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                state.audioChunks.push(event.data);
-            }
-        };
-
-        state.mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(state.audioChunks, { type: 'audio/webm' });
-            await processAudioRecording(audioBlob);
-
-            // Stop all tracks
-            stream.getTracks().forEach(track => track.stop());
-        };
-
-        state.mediaRecorder.start();
-        state.isRecording = true;
-        elements.recordBtn.classList.add('recording');
-        elements.recordBtn.textContent = '⏹️ Stop';
-
-        log('Recording started', 'success');
-
-    } catch (error) {
-        log(`Recording failed: ${error.message}`, 'error');
-        alert('Microphone access denied');
-    }
-}
-
-function stopRecording() {
-    if (state.mediaRecorder && state.isRecording) {
-        state.mediaRecorder.stop();
-        state.isRecording = false;
-        elements.recordBtn.classList.remove('recording');
-        elements.recordBtn.textContent = '🎤 Record';
-        log('Recording stopped');
-    }
-}
-
 async function processAudioRecording(audioBlob) {
     try {
         log('Processing audio recording...');
 
         // For demo purposes, we'll just add a placeholder message
         // In a real implementation, you'd upload the audio and get transcription
-        addMessage('[Audio message recorded]', 'user');
+        addMessageBubble('[Audio message recorded]', 'user');
 
         // Simulate assistant response
         setTimeout(() => {
-            addMessage('I heard your audio message. This is a demo response.', 'assistant');
+            addMessageBubble('I heard your audio message. This is a demo response.', 'assistant');
         }, 1000);
 
     } catch (error) {
@@ -1007,7 +1034,7 @@ function updateStatus(status) {
     elements.status.textContent = status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function addMessage(text, type) {
+function addMessageBubble(text, type) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
     messageDiv.textContent = text;
@@ -1032,7 +1059,7 @@ function checkWebRTCSupport() {
     log(`WebRTC support: ${supported}`, supported ? 'success' : 'error');
 
     if (!supported) {
-        addMessage('Your browser does not support WebRTC. Please use a modern browser.', 'system');
+        addMessageBubble('Your browser does not support WebRTC. Please use a modern browser.', 'system');
         elements.connectBtn.disabled = true;
     }
 }
@@ -1046,75 +1073,16 @@ state.azureRegion = null;
 // Azure Speech configuration
 async function setupAzureSpeech() {
     try {
-        // For demo, you could hardcode these, but for production, 
-        // fetch from your backend to keep keys secure
-        const config = await fetchSpeechConfig();  // Implement this to get keys from backend
-
-        state.azureKey = config.key;
-        state.azureRegion = config.region;
-
-        state.speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
-            state.azureKey,
-            state.azureRegion
-        );
-
-        // Configure for optimal real-time performance
-        state.speechConfig.speechRecognitionLanguage = "en-US";
-        state.speechConfig.outputFormat = SpeechSDK.OutputFormat.Detailed;
-
-        // Enable punctuation and capitalization
-        state.speechConfig.setServiceProperty(
-            "punctuation",
-            "explicit",
-            SpeechSDK.ServicePropertyChannel.UriQueryParameter
-        );
-
-        log('Azure Speech configured successfully', 'success');
-        return true;
-    } catch (error) {
-        log(`Azure Speech setup failed: ${error.message}`, 'error');
-        return false;
-    }
-}
-
-async function fetchSpeechConfig() {
-    try {
-        log('Fetching Azure Speech configuration from backend...', 'info');
-
-        const response = await fetch(`${API_BASE_URL}/api/speech/config`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const config = await response.json();
-
-        if (!config.key || !config.region) {
-            throw new Error('Invalid speech configuration received');
-        }
-
-        log(`Speech config received for region: ${config.region}`, 'success');
-        return config;
-
-    } catch (error) {
-        log(`Failed to fetch speech config: ${error.message}`, 'error');
-        throw error;
-    }
-}
-
-// Update the setupAzureSpeech function to handle errors better:
-async function setupAzureSpeech() {
-    try {
         // Fetch credentials from your C# backend
-        const config = await fetchSpeechConfig();
+        const config = await fetchSpeechAndTTSConfig();
 
-        state.azureKey = config.key;
-        state.azureRegion = config.region;
+        // Update TTS config
+        if (config.voiceId) ttsConfig.voiceId = config.voiceId;
+        if (config.defaultStyle) ttsConfig.defaultStyle = config.defaultStyle;
+
+        // Update STT config in state
+        if (config.apiKey) state.azureKey = config.apiKey;
+        if (config.region) state.azureRegion = config.region;
 
         // Ensure the Speech SDK is loaded
         if (typeof SpeechSDK === 'undefined') {

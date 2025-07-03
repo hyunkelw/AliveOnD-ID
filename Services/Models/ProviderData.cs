@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace AliveOnD_ID.Services.Models;
 #region Request Models
@@ -8,14 +8,24 @@ namespace AliveOnD_ID.Services.Models;
 /// </summary>
 public class ProviderData
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "microsoft";
     
-    [JsonProperty("voice_id")]
+    [JsonPropertyName("voice_id")]
     public string? VoiceId { get; set; } // Nullable, set from config
     
-    [JsonProperty("voice_config")]
-    public object? VoiceConfig { get; set; } // Nullable, set from config or left null
+    [JsonPropertyName("voice_config")]
+    public VoiceConfigData? VoiceConfig { get; set; } // Nullable, set from config or left null
 }
 
 #endregion
+
+//    "provider": {
+//        "type": "microsoft",
+//        "voice_id": "Sara",
+//        "voice_config": {
+//            "style": "cheerful",
+//            "rate": "1",
+//            "pitch": "1"
+//        }
+//    }

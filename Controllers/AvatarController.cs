@@ -58,11 +58,37 @@ public class AvatarController : ControllerBase
                 return BadRequest("Missing required field: script.input");
             }
 
-            var success = await _avatarService.SendTextToAvatarAsync(
-                streamId,
-                request.SessionId,
-                request.Script.Input,
-                null); // emotion can be extracted from provider if needed
+            if (request.Script.Provider == null)
+            {
+                return BadRequest("Missing required field: script.Provider");
+            }
+
+            if (request.Script.Provider.VoiceConfig == null)
+            {
+                return BadRequest("Missing required field: script.Provider.voice_config");
+            }
+
+            //request.PresenterConfig = null;
+            //request.Background = null; // Clear background if not needed
+
+            //string? emotion = null;
+            //if (request.Script?.Provider != null && request.Script.Provider.VoiceConfig is Newtonsoft.Json.Linq.JObject vcObj && vcObj["emotion"] != null)
+            //{
+            //    emotion = vcObj["emotion"]?.ToString();
+            //}
+            //// Optionally, support emotion as a direct property if frontend sends it that way
+            //if (string.IsNullOrEmpty(emotion) && request.Script?.Provider != null && request.Script.Provider.GetType().GetProperty("Emotion") != null)
+            //{
+            //    emotion = request.Script.Provider.GetType().GetProperty("Emotion")?.GetValue(request.Script.Provider)?.ToString();
+            //}
+
+            var success = await _avatarService.SendScriptToAvatarAsync(streamId, request);
+
+            // var success = await _avatarService.SendTextToAvatarAsync(
+            //    streamId,
+            //    request.SessionId,
+            //    request.Script?.Input ?? string.Empty,
+            //    null); // pass emotion if present
 
             if (!success)
             {

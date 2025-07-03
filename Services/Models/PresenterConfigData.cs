@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace AliveOnD_ID.Services.Models;
 #region Request Models
@@ -8,7 +8,7 @@ namespace AliveOnD_ID.Services.Models;
 /// </summary>
 public class PresenterConfigData
 {
-    [JsonProperty("crop")]
+    [JsonPropertyName("crop")]
     public CropConfigData? CropConfigData { get; set; }
 }
 

@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace AliveOnD_ID.Services.Models;
 #region Request Models
@@ -8,16 +8,16 @@ namespace AliveOnD_ID.Services.Models;
 /// </summary>
 public class RectangleConfigData
 {
-    [JsonProperty("bottom")]
+    [JsonPropertyName("bottom")]
     public double Bottom { get; set; } = 1;
 
-    [JsonProperty("right")]
+    [JsonPropertyName("right")]
     public double Right { get; set; } = 1;
 
-    [JsonProperty("left")]
+    [JsonPropertyName("left")]
     public double Left { get; set; } = 0;
 
-    [JsonProperty("top")]
+    [JsonPropertyName("top")]
     public double Top { get; set; } = 0;
 }
 

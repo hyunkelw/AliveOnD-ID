@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace AliveOnD_ID.Services.Models;
 #region Request Models
@@ -8,17 +8,32 @@ namespace AliveOnD_ID.Services.Models;
 /// </summary>
 public class ScriptData
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "text";
     
-    [JsonProperty("provider")]
+    [JsonPropertyName("provider")]
     public ProviderData? Provider { get; set; }
     
-    [JsonProperty("input")]
+    [JsonPropertyName("input")]
     public string Input { get; set; } = string.Empty;
     
-    [JsonProperty("ssml")]
-    public bool Ssml { get; set; } = false;
+    [JsonPropertyName("ssml")]
+    public bool Ssml { get; set; } = true;
 }
 
 #endregion
+
+//    "script": {
+//    "type": "text",
+//    "provider": {
+//        "type": "microsoft",
+//        "voice_id": "Sara",
+//        "voice_config": {
+//            "style": "cheerful",
+//            "rate": "1",
+//            "pitch": "1"
+//        }
+//    },
+//    "ssml": true,
+//    "input": "this is an example"
+//  }

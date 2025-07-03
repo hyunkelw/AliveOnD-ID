@@ -9,14 +9,14 @@ namespace AliveOnD_ID.Services;
 // Audio to Text Service - Fixed without retry policy
 public class ASRService : BaseHttpService, IASRService
 {
-    private readonly ASRConfig _config;
+    private readonly AzureSpeechServicesConfig _config;
 
     public ASRService(
         HttpClient httpClient,
         IOptions<ServiceConfiguration> config,
         ILogger<ASRService> logger) : base(httpClient, logger)
     {
-        _config = config.Value.ASR;
+        _config = config.Value.AzureSpeechServices;
         _httpClient.BaseAddress = new Uri(_config.BaseUrl);
         //_httpClient.Timeout = TimeSpan.FromSeconds(_config.Timeout);
     }

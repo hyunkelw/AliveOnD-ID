@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace AliveOnD_ID.Services.Models;
 #region Request Models
@@ -8,7 +8,7 @@ namespace AliveOnD_ID.Services.Models;
 /// </summary>
 public class BackgroundConfigData
 {
-    [JsonProperty("color")]
+    [JsonPropertyName("color")]
     public bool Color { get; set; } = false;
 
 }
