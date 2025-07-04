@@ -84,16 +84,26 @@ public class AvatarController : ControllerBase
 
             var success = await _avatarService.SendScriptToAvatarAsync(streamId, request);
 
-            // var success = await _avatarService.SendTextToAvatarAsync(
+            if (!success)
+            {
+                _logger.LogError("Failed to send SCRIPT to avatar : {success}", success);
+                return BadRequest("Failed to send SCRIPT to avatar");
+            }
+            else
+            {
+                _logger.LogInformation("Successfully sent script to avatar stream {StreamId}", streamId);
+            }
+
+            // success = await _avatarService.SendTextToAvatarAsync(
             //    streamId,
             //    request.SessionId,
             //    request.Script?.Input ?? string.Empty,
             //    null); // pass emotion if present
 
-            if (!success)
-            {
-                return BadRequest("Failed to send text to avatar");
-            }
+            // if (!success)
+            // {
+            //     return BadRequest("Failed to send TEXT to avatar");
+            // }
 
             return Ok(new { success = true });
         }

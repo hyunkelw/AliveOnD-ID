@@ -827,16 +827,27 @@ async function handleSendMessage() {
 
         // Map emotions to appropriate voice characteristics
         const voiceMapping = {
-            'happy': { voice: ttsConfig.voiceId, style: 'cheerful' },
-            'sad': { voice: ttsConfig.voiceId, style: 'sad' },
-            'angry': { voice: ttsConfig.voiceId, style: 'angry' },
-            'neutral': { voice: ttsConfig.voiceId, style: 'neutral' },
+
+            'happy': { voice: ttsConfig.voiceId, style: 'cheerful' }, // Default happy voice
             'excited': { voice: ttsConfig.voiceId, style: 'excited' },
-            'calm': { voice: ttsConfig.voiceId, style: 'calm' }
+            'thoughtful': { voice: ttsConfig.voiceId, style: 'hopeful' },
+            'curious': { voice: ttsConfig.voiceId, style: 'chat' },
+            'confident': { voice: ttsConfig.voiceId, style: 'friendly' },
+            'concerned': { voice: ttsConfig.voiceId, style: 'sad' },
+            'empathetic': { voice: ttsConfig.voiceId, style: 'empathetic' }
         };
 
+        //    'happy': { voice: ttsConfig.voiceId, style: 'excited' },
+        //    'sad': { voice: ttsConfig.voiceId, style: 'sad' },
+        //    'angry': { voice: ttsConfig.voiceId, style: 'angry' },
+        //    'neutral': { voice: ttsConfig.voiceId, style: 'neutral' },
+        //    'excited': { voice: ttsConfig.voiceId, style: 'excited' },
+        //    'empathetic': { voice: ttsConfig.voiceId, style: 'empathetic' },
+        //    'calm': { voice: ttsConfig.voiceId, style: 'calm' }
+        //};
+
         const voiceConfig = voiceMapping[emotion] || { voice: ttsConfig.voiceId, style: ttsConfig.defaultStyle };
-        log(`TTS DEBUG: Using voiceId='${voiceConfig.voice}' with style='${voiceConfig.style}' for emotion='${emotion}'`, 'info');
+        log(`TTS DEBUG: Using voiceId='${ttsConfig.voiceId}' with style='${voiceConfig.style}' for emotion='${emotion}'`, 'info');
 
         //const avatarResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
         //    method: 'POST',
@@ -874,9 +885,10 @@ async function handleSendMessage() {
         const scriptRequest = CreateAvatarScriptRequest(state.streamSessionId, voiceConfig.voice, responseText, voiceConfig.style);
         const url = `${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`;
         const avatarResponse = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(scriptRequest)});
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(scriptRequest)
+        });
 
         if (!avatarResponse.ok) {
             const errorText = await avatarResponse.text();
@@ -926,8 +938,9 @@ function CreateAvatarScriptRequest(sessionId, voiceId, inputText, style) {
                     style: style
                 }
             },
-            input: wrapInSSML(inputText, style),
+            input: inputText,
             ssml: style !== 'neutral' // Use SSML only if style is not neutral
+            //ssml: false
         },
         presenter_config: {
             crop: {
@@ -941,11 +954,11 @@ function CreateAvatarScriptRequest(sessionId, voiceId, inputText, style) {
             }
         },
         background: {
-            color: false
+            color: "#16213e"
         },
-        config: {
-            stitch: true
-        }
+    //    config: {
+    //        stitch: true
+    //    }
     }
     return body;
 }
@@ -961,7 +974,7 @@ function wrapInSSML(text, style) {
             xmlns:mstts="https://www.w3.org/ns/2001/mstts" xml:lang="en-US">
         <voice name="${ttsConfig.voiceId}">
             <mstts:express-as style="${style}">
-                ${escapeXML(text)}
+                ${text}
             </mstts:express-as>
         </voice>
     </speak>`;

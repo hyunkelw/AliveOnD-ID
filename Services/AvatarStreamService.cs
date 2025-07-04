@@ -231,6 +231,9 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
 
             var authHeader = $"Basic {_config.ApiKey}";
 
+            var jsonContent = JsonSerializer.Serialize(requestData);
+            _logger.LogDebug("SendTextToAvatarAsync JSON: {Json}", jsonContent);
+
             var success = await PostAsync(endpoint, requestData, authHeader);
 
             if (success)
@@ -373,32 +376,41 @@ public class AvatarStreamService : BaseHttpService, IAvatarStreamService
             var endpoint = $"/clips/streams/{streamId}";
             var sessionId = scriptRequest.SessionId;
 
-            // Only strip the session ID if it's a cookie string
-            // var cleanSessionId = sessionId.Contains("AWSALB=") ?
-            //     ExtractSessionIdFromCookie(sessionId) :
-            //     sessionId;
-
-            var configDict = new Dictionary<string, object>
-            {
-                ["stitch"] = true,
-                ["driver"] = new
-                {
-                    loop = false,
-                    enable_audio_normalization = true,
-                    motion_speed = 0.7,    // Slightly slower for more natural movement
-                    silence_padding = 0.2   // Add slight pause between sentences
-                }
-            };
-
             var authHeader = $"Basic {_config.ApiKey}";
+
             var requestData = new
             {
-                script = scriptRequest,
-                config = configDict,
-                session_id = sessionId
+                script = new
+                {
+                    type = "text",
+                    provider = new
+                    {
+                        type = "microsoft",
+                        voice_id = scriptRequest.Script.Provider.VoiceId,
+                        voice_config = new
+                        {
+                            style = scriptRequest.Script.Provider.VoiceConfig.Style,
+                            rate = scriptRequest.Script.Provider.VoiceConfig.Rate,
+                            pitch = scriptRequest.Script.Provider.VoiceConfig.Pitch
+                        }
+                    },
+                    input = scriptRequest.Script.Input,
+                    ssml = scriptRequest.Script.Ssml
+                },
+                config = new
+                {
+                    logo = false,  // or omit if you want default
+                    result_format = "mp4"
+                },
+                //presenter_config = scriptRequest.PresenterConfig,
+                background = scriptRequest.Background,
+                session_id = scriptRequest.SessionId
             };
+            
+            var jsonContent = JsonSerializer.Serialize(requestData);
+            _logger.LogDebug("SendScriptToAvatarAsync JSON: {Json}", jsonContent);
 
-            var success = await PostAsync(endpoint, scriptRequest, authHeader);
+            var success = await PostAsync(endpoint, requestData, authHeader);
 
             if (success)
             {

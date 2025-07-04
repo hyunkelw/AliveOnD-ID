@@ -9,7 +9,7 @@ namespace AliveOnD_ID.Services.Models;
 public class BackgroundConfigData
 {
     [JsonPropertyName("color")]
-    public bool Color { get; set; } = false;
+    public string Color { get; set; } = "false";
 
 }
 
