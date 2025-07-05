@@ -78,8 +78,6 @@ builder.Services.AddMemoryCache();
 
 builder.Services.AddTransient<IAvatarStreamService, AvatarStreamService>();
 builder.Services.AddTransient<IASRService, ASRService>();
-// builder.Services.AddScoped<IAudioProcessingService, AudioProcessingService>();
-// builder.Services.AddScoped<ILLMService, LLMService>();
 builder.Services.AddSingleton<ILLMService, WebSocketLLMService>();
 builder.Services.AddTransient<IChatSessionService, ChatSessionService>();
 builder.Services.AddTransient<IStorageService, InMemoryStorageService>();

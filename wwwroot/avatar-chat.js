@@ -537,64 +537,6 @@ function OnTrackReceived(event) {
     }
 }
 
-//async function sendInitialGreeting() {
-//    if (!state.isStreamReady) {
-//        log('Stream not ready yet, waiting...', 'info');
-//        return;
-//    }
-
-//    const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
-
-//    // Your existing greeting code here...
-//    const requestBody = {
-//        session_id: state.streamSessionId,
-//        script: {
-//            type: "text",
-//            provider: {
-//                type: "microsoft",
-//                voice_id: "en-US-JennyNeural"
-//            },
-//            input: greetingText,
-//            ssml: false
-//        },
-//        presenter_config: {
-//            crop: {
-//                type: "wide",
-//                rectangle: {
-//                    bottom: 1,
-//                    right: 1,
-//                    left: 0,
-//                    top: 0
-//                }
-//            }
-//        },
-//        background: {
-//            color: "white"
-//        },
-//        config: {
-//            stitch: true
-//        }
-//    };
-//    log(`[SENDINITIALGREETING] ${JSON.stringify(requestBody)}`);
-
-//    log(`Sending request body: ${JSON.stringify(requestBody)}`, 'info');
-
-//    // D-ID expects the stream endpoint without '/text' suffix
-//    const response = await fetch(`${API_BASE_URL}/api/avatar/stream/${state.streamId}`, {
-//        method: 'POST',
-//        headers: { 'Content-Type': 'application/json' },
-//        body: JSON.stringify(requestBody)
-//    });
-
-//    if (response.ok) {
-//        log('Greeting sent to avatar', 'success');
-//        addMessage(greetingText, 'assistant');
-//    } else {
-//        const errorText = await response.text();
-//        log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
-//    }
-//}
-
 function onConnected() {
     state.isConnected = true;
     updateStatus('connected');
@@ -627,56 +569,6 @@ function onConnected() {
         // Now send the greeting
         log('Sending greeting to activate avatar...');
         const greetingText = "Hello! I'm your AI assistant. How can I help you today?";
-        //fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
-        //    method: 'POST',
-        //    headers: { 'Content-Type': 'application/json' },
-        //    body: JSON.stringify({
-        //        session_id: state.streamSessionId,
-        //        script: {
-        //            type: "text",
-        //            provider: {
-        //                type: "microsoft",
-        //                voice_id: ttsConfig.voiceId,
-        //                voice_config = new
-        //                    {
-        //                        rate = "+0%",  // Normal speaking rate
-        //                        pitch = "+0%",
-        //                        style = _azureSpeechConfig.DefaultStyle
-        //                    }
-        //            },
-        //            input: wrapInSSML(greetingText, ttsConfig.defaultStyle),
-        //            ssml: ttsConfig.defaultStyle !== "neutral" ? false: true // Use SSML only if style is not neutral) 
-        //        },
-        //        config: {
-        //            stitch: true
-        //        },
-        //        presenter_config: {
-        //            crop: {
-        //                type: "wide",
-        //                rectangle: {
-        //                    bottom: 1,
-        //                    right: 1,
-        //                    left: 0,
-        //                    top: 0
-        //                }
-        //            }
-        //        },
-        //        background: {
-        //            color: false
-        //        }
-        //    })
-        //}).then(response => {
-        //    if (response.ok) {
-        //        log('Greeting sent to avatar', 'success');
-        //        addMessageBubble(greetingText, 'assistant');
-        //    } else {
-        //        response.text().then(errorText => {
-        //            log(`Failed to send greeting: ${response.status} - ${errorText}`, 'error');
-        //        });
-        //    }
-        //}).catch(error => {
-        //    log(`Greeting error: ${error.message}`, 'error');
-        //});
         const greetingRequest = CreateAvatarScriptRequest(state.streamSessionId, ttsConfig.voiceId, greetingText, ttsConfig.defaultStyle);
         fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
             method: 'POST',
@@ -837,51 +729,9 @@ async function handleSendMessage() {
             'empathetic': { voice: ttsConfig.voiceId, style: 'empathetic' }
         };
 
-        //    'happy': { voice: ttsConfig.voiceId, style: 'excited' },
-        //    'sad': { voice: ttsConfig.voiceId, style: 'sad' },
-        //    'angry': { voice: ttsConfig.voiceId, style: 'angry' },
-        //    'neutral': { voice: ttsConfig.voiceId, style: 'neutral' },
-        //    'excited': { voice: ttsConfig.voiceId, style: 'excited' },
-        //    'empathetic': { voice: ttsConfig.voiceId, style: 'empathetic' },
-        //    'calm': { voice: ttsConfig.voiceId, style: 'calm' }
-        //};
-
         const voiceConfig = voiceMapping[emotion] || { voice: ttsConfig.voiceId, style: ttsConfig.defaultStyle };
         log(`TTS DEBUG: Using voiceId='${ttsConfig.voiceId}' with style='${voiceConfig.style}' for emotion='${emotion}'`, 'info');
 
-        //const avatarResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`, {
-        //    method: 'POST',
-        //    headers: { 'Content-Type': 'application/json' },
-        //    body: JSON.stringify({
-        //        session_id: state.streamSessionId,
-        //        script: {
-        //            type: "text",
-        //            provider: {
-        //                type: "microsoft",
-        //                voice_id: voiceConfig.voice || ttsConfig.voiceId
-        //            },
-        //            input: responseText,
-        //            ssml: wrapInSSML(responseText, voiceConfig.style || ttsConfig.defaultStyle)
-        //        },
-        //        presenter_config: {
-        //            crop: {
-        //                type: "wide",
-        //                rectangle: {
-        //                    bottom: 1,
-        //                    right: 1,
-        //                    left: 0,
-        //                    top: 0
-        //                }
-        //            }
-        //        },
-        //        background: {
-        //            color: false
-        //        },
-        //        config: {
-        //            stitch: true
-        //        }
-        //    })
-        //});
         const scriptRequest = CreateAvatarScriptRequest(state.streamSessionId, voiceConfig.voice, responseText, voiceConfig.style);
         const url = `${API_BASE_URL}${API_ENDPOINTS.startStream}${state.streamId}`;
         const avatarResponse = await fetch(url, {
@@ -963,33 +813,6 @@ function CreateAvatarScriptRequest(sessionId, voiceId, inputText, style) {
     return body;
 }
 
-// Helper function to wrap text in SSML for emotion
-function wrapInSSML(text, style) {
-    if (style === 'neutral') {
-        return text; // Don't use SSML for neutral
-    }
-
-    // Microsoft Azure SSML format with style
-    return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" 
-            xmlns:mstts="https://www.w3.org/ns/2001/mstts" xml:lang="en-US">
-        <voice name="${ttsConfig.voiceId}">
-            <mstts:express-as style="${style}">
-                ${text}
-            </mstts:express-as>
-        </voice>
-    </speak>`;
-}
-
-// Helper function to escape XML special characters
-function escapeXML(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
-
 // Optional: Store messages in session for conversation history
 async function storeMessageInSession(content, role, emotion = null) {
     try {
@@ -1021,24 +844,6 @@ async function storeMessageInSession(content, role, emotion = null) {
 async function handleRecord() {
     if (state.isRecording) { stopRecording(); }
     else { startRecording(); }
-}
-
-async function processAudioRecording(audioBlob) {
-    try {
-        log('Processing audio recording...');
-
-        // For demo purposes, we'll just add a placeholder message
-        // In a real implementation, you'd upload the audio and get transcription
-        addMessageBubble('[Audio message recorded]', 'user');
-
-        // Simulate assistant response
-        setTimeout(() => {
-            addMessageBubble('I heard your audio message. This is a demo response.', 'assistant');
-        }, 1000);
-
-    } catch (error) {
-        log(`Audio processing failed: ${error.message}`, 'error');
-    }
 }
 
 // UI Helper Functions
