@@ -1,220 +1,479 @@
-# D-ID Avatar Setup Guide for AliveOnD-ID
+# ALIVE - Avatar Liveness for Intelligent Virtual Empathy
 
-## 🎯 Quick Start Checklist
+## Project Overview
 
-1. ✅ **Get D-ID API credentials**
-2. ✅ **Configure appsettings.json**
-3. ✅ **Add the new controller and test page**
-4. ✅ **Test avatar functionality**
-5. ✅ **Integrate with your chat system**
+ALIVE (Avatar Liveness for Intelligent Virtual Empathy) Release 5 is an AI-powered virtual assistant system that provides empathetic conversational experiences through realistic avatar representations. The system is part of the [SERMAS Project](https://sermasproject.eu/meet-the-project-alive/) initiative.
 
----
+### Key Features
 
-## 1. Get D-ID API Credentials
+- **Multi-modal Input**: Support for both voice (microphone) and text-based interactions
+- **Empathetic AI Responses**: Powered by EVE LLM (Thingenious) for contextually appropriate and emotionally aware responses
+- **Realistic Avatar Visualization**: D-ID Clips API integration for lifelike avatar animations with SSML-enhanced emotional speech
+- **Emotional Speech Synthesis**: Microsoft Azure Speech Services for voice input recognition
+- **Real-time Interaction**: WebRTC-based streaming for synchronized audio-visual avatar responses
 
-### Sign up for D-ID Account
-1. Go to [D-ID Studio](https://studio.d-id.com)
-2. Create an account or sign in
-3. Navigate to **API** section in dashboard
-4. Copy your **API Key**
+## System Architecture
 
-### Get Presenter and Driver IDs
-1. In D-ID Studio, go to **Presenters** section
-2. Choose or upload a presenter image
-3. Copy the **Presenter ID** (e.g., `jack-Pt27VkP3hW`)
-4. Go to **Drivers** section 
-5. Choose a driver (voice/animation style)
-6. Copy the **Driver ID** (e.g., `fbQicImV2J`)
+### Technology Stack
 
----
+- **Backend**: ASP.NET Core 6.0+ (C#)
+- **Frontend**: JavaScript (Vanilla) with WebRTC
+- **Avatar Engine**: D-ID Clips API
+- **Speech Recognition**: Microsoft Azure Speech Services
+- **LLM**: EVE by Thingenious (WebSocket-based)
+- **Real-time Communication**: WebRTC for avatar video streaming
 
-## 2. Configure Your Application
+### Component Overview
 
-### Update appsettings.json
-Replace the D-ID section with your real credentials:
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Web Browser   │────▶│  ASP.NET Core    │────▶│   D-ID API      │
+│  (JavaScript)   │     │    Backend       │     │ (Avatar Clips)  │
+│   WebRTC        │     │                  │     └─────────────────┘
+└─────────────────┘     │                  │     
+                        │                  │     ┌─────────────────┐
+                        │                  │────▶│ Microsoft Azure │
+                        │                  │     │ Speech Services │
+                        │                  │     └─────────────────┘
+                        │                  │     
+                        │                  │     ┌─────────────────┐
+                        │                  │────▶│    EVE LLM      │
+                        │                  │     │  (WebSocket)    │
+                        └──────────────────┘     └─────────────────┘
+```
+
+## Prerequisites
+
+- .NET 6.0 SDK or higher
+- Active D-ID account with API access
+- Microsoft Azure account with Speech Services enabled
+- Access to EVE LLM endpoint (Thingenious)
+- Modern web browser with WebRTC support
+- HTTPS-enabled development environment (required for microphone access)
+
+## Installation
+
+### 1. Clone Repository
+
+```bash
+git clone [repository-url]
+cd ALIVE
+```
+
+### 2. Install Dependencies
+
+```bash
+dotnet restore
+```
+
+### 3. Configure SSL Certificate (Development)
+
+```bash
+dotnet dev-certs https --trust
+```
+
+## Configuration
+
+### 1. Application Settings
+
+Create or update `appsettings.json` with the following structure:
 
 ```json
 {
   "Services": {
     "DID": {
-      "ApiKey": "YOUR_ACTUAL_D-ID_API_KEY",
+      "ApiKey": "[YOUR_D-ID_API_KEY]",
       "BaseUrl": "https://api.d-id.com",
-      "PresenterId": "YOUR_PRESENTER_ID",
-      "DriverId": "YOUR_DRIVER_ID"
+      "PresenterId": "[SELECTED_PRESENTER_ID]",
+      "DriverId": "[SELECTED_DRIVER_ID]"
+    },
+    "AzureSpeechServices": {
+      "ApiKey": "[YOUR_AZURE_SPEECH_KEY]",
+      "Region": "[YOUR_AZURE_REGION]",
+      "VoiceId": "[SELECTED_VOICE_WITH_STYLES]"
+    },
+    "LLM": {
+      "ApiKey": "[EVE_API_KEY]",
+      "BaseUrl": "[EVE_WEBSOCKET_URL]",
+      "Model": "EVE",
+      "Timeout": 60
+    }
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
     }
   }
 }
 ```
 
-### Environment Variables (Optional but Recommended)
-For security, you can use environment variables:
+### 2. Environment Variables
 
-**Windows PowerShell:**
-```powershell
-$env:D_ID_API_KEY = "your-actual-api-key"
+For production deployments, the system supports environment variable substitution. Set these environment variables:
+
+```bash
+export DID_API_KEY="your-d-id-api-key"
+export AZURE_SPEECH_KEY="your-azure-speech-key"
+export EVE_API_KEY="your-eve-api-key"
 ```
 
-Then in appsettings.json:
+Then reference them in appsettings.json:
 ```json
-"ApiKey": "D_ID_API_KEY"
-```
-
----
-
-## 3. Add New Files to Your Project
-
-### Add the Avatar Test Controller
-1. Create `Controllers/AvatarTestController.cs`
-2. Copy the content from the "Avatar Test Controller" artifact above
-
-### Add the Avatar Test Page
-1. Create `Pages/AvatarTest.razor`
-2. Copy the content from the "Avatar Test Page" artifact above
-
-### Update Navigation (Optional)
-Add to `Shared/NavMenu.razor`:
-```html
-<div class="nav-item px-3">
-    <NavLink class="nav-link" href="avatar-test">
-        <span class="oi oi-camera-slr" aria-hidden="true"></span> Avatar Test
-    </NavLink>
-</div>
-```
-
----
-
-## 4. Build and Test
-
-### Build the Project
-```powershell
-dotnet build
-dotnet run
-```
-
-### Test Via Swagger (API Testing)
-1. Navigate to: `https://localhost:7031/swagger`
-2. Look for `AvatarTest` endpoints
-3. Test the workflow:
-   - **POST** `/api/AvatarTest/create-stream` → Get TestSessionId
-   - **POST** `/api/AvatarTest/speak/{testSessionId}` → Make avatar speak
-
-### Test Via UI (User-Friendly)
-1. Navigate to: `https://localhost:7031/avatar-test`
-2. Click **"Create Stream"**
-3. Enter text in the speech box
-4. Click **"Speak"**
-
----
-
-## 5. Testing Workflow
-
-### Basic Avatar Speech Test
-
-**Step 1: Create Stream**
-```bash
-curl -X POST "https://localhost:7031/api/AvatarTest/create-stream" \
-  -H "Content-Type: application/json" \
-  -d "{}"
-```
-
-**Step 2: Make Avatar Speak**
-```bash
-curl -X POST "https://localhost:7031/api/AvatarTest/speak/{testSessionId}" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"text\": \"Hello! I am your AI avatar.\",
-    \"sessionId\": \"your-session-id\",
-    \"emotion\": \"happy\"
-  }"
-```
-
-### Expected Results
-✅ **Success:** Avatar stream created, text sent to D-ID API  
-✅ **Audio:** Avatar should generate speech audio  
-⚠️ **Video:** WebRTC video stream requires additional setup  
-
----
-
-## 6. Understanding the Current Implementation
-
-### What Works Now
-- ✅ **Stream Creation:** Creates D-ID avatar streams
-- ✅ **Text-to-Speech:** Sends text to avatar for speech generation
-- ✅ **API Integration:** Full D-ID Clips API integration
-- ✅ **Error Handling:** Proper logging and error responses
-
-### What Needs WebRTC (Future Enhancement)
-- 🔄 **Video Display:** Real-time video streaming to browser
-- 🔄 **Full Interactivity:** Complete bidirectional communication
-
-### Current Limitations
-- **No Real Video:** The video element won't show the avatar yet (needs WebRTC)
-- **Audio Only:** The avatar generates speech but video display requires WebRTC setup
-- **Mock Connection:** The test UI shows "Connected (Mock)" status
-
----
-
-## 7. Integration with Your Chat System
-
-### Connect to ChatLayout Component
-Once avatar speech testing works, you can integrate it with your chat:
-
-```csharp
-// In your ChatLayout.razor SendTextMessage method:
-private async Task ProcessLLMResponse(string userMessage)
 {
-    // 1. Get LLM response
-    var llmResponse = await LLMService.GetResponseAsync(userMessage);
-    
-    // 2. Send to avatar
-    if (!string.IsNullOrEmpty(CurrentStreamId))
-    {
-        await AvatarService.SendTextToAvatarAsync(
-            CurrentStreamId, 
-            CurrentSessionId, 
-            llmResponse.Text, 
-            llmResponse.Emotion);
+  "Services": {
+    "DID": {
+      "ApiKey": "DID_API_KEY"
+    },
+    "AzureSpeechServices": {
+      "ApiKey": "AZURE_SPEECH_KEY"
+    },
+    "LLM": {
+      "ApiKey": "EVE_API_KEY"
     }
+  }
 }
 ```
 
----
+### 3. Avatar Selection
 
-## 8. Troubleshooting
+Available presenters can be retrieved from: https://api.d-id.com/clips/presenters
+
+Example presenter configuration:
+```json
+"PresenterId": "amy-Aq6OmGZnMt",
+"DriverId": "Vcq0R4a8F0"
+```
+
+### 4. Voice Selection
+
+Choose a voice that supports multiple emotional styles from the [Microsoft Voice Gallery](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#voice-styles-and-roles).
+
+Recommended voices with style support:
+- `en-US-JennyNeural` (supports: cheerful, sad, angry, excited, friendly, hopeful, shouting, whispering)
+- `en-US-AriaNeural` (supports: angry, cheerful, excited, friendly, hopeful, sad, shouting, unfriendly, whispering)
+- `en-US-GuyNeural` (supports: angry, cheerful, excited, friendly, hopeful, sad, shouting, unfriendly, whispering)
+
+## API Endpoints
+
+### Session Management
+
+**Create Session**
+```
+POST /api/session/create
+Content-Type: application/json
+
+{
+  "userId": "string"
+}
+
+Response:
+{
+  "id": "string",
+  "userId": "string",
+  "messages": [],
+  "createdAt": "2025-01-07T12:00:00Z",
+  "lastUpdated": "2025-01-07T12:00:00Z"
+}
+```
+
+**Get Session**
+```
+GET /api/session/{sessionId}
+
+Response: ChatSession object
+```
+
+**Add Message to Session**
+```
+POST /api/session/{sessionId}/messages
+Content-Type: application/json
+
+{
+  "type": "user|assistant",
+  "content": "string",
+  "emotion": "string"
+}
+```
+
+### Avatar Management
+
+**Create Avatar Stream**
+```
+POST /api/avatar/stream/create
+Content-Type: application/json
+
+{
+  "presenterId": "string", // optional, uses default if not provided
+  "driverId": "string"     // optional, uses default if not provided
+}
+
+Response:
+{
+  "streamId": "string",
+  "sessionId": "string",
+  "iceServers": [...],
+  "sdpOffer": {...}
+}
+```
+
+**Send Script to Avatar**
+```
+POST /api/avatar/stream/{streamId}
+Content-Type: application/json
+
+{
+  "sessionId": "string",
+  "script": {
+    "type": "text",
+    "input": "string",
+    "provider": {
+      "type": "microsoft",
+      "voiceId": "string",
+      "voiceConfig": {
+        "style": "cheerful|sad|angry|..."
+      }
+    }
+  }
+}
+```
+
+**Start Stream with SDP Answer**
+```
+POST /api/avatar/stream/{streamId}/start
+Content-Type: application/json
+
+{
+  "sessionId": "string",
+  "sdpAnswer": {...}
+}
+```
+
+**Send ICE Candidate**
+```
+POST /api/avatar/stream/{streamId}/ice
+Content-Type: application/json
+
+{
+  "sessionId": "string",
+  "candidate": "string",
+  "mid": "string",
+  "lineIndex": 0
+}
+```
+
+**Close Stream**
+```
+DELETE /api/avatar/stream/{streamId}
+Content-Type: application/json
+
+{
+  "session_id": "string"
+}
+```
+
+### LLM Integration
+
+**Send Message to LLM**
+```
+POST /api/llm/Send
+Content-Type: application/json
+
+{
+  "message": "string"
+}
+
+Response:
+{
+  "text": "string",
+  "emotion": "happy|sad|excited|thoughtful|curious|confident|concerned|empathetic",
+  "response": "string", // same as text
+  "metadata": {
+    "conversation_id": "string"
+  }
+}
+```
+
+### Speech Configuration
+
+**Get Speech Configuration**
+```
+GET /api/speech/config
+
+Response:
+{
+  "apiKey": "string",
+  "region": "string",
+  "voiceId": "string"
+}
+```
+
+## Frontend Integration
+
+### Avatar Chat Interface
+
+The main interface is served at the root URL and includes:
+
+1. **WebRTC Video Element**: Displays the avatar stream
+2. **Chat Interface**: Shows conversation history with user/assistant bubbles
+3. **Input Controls**: Text input and microphone recording button
+4. **Debug Panel**: Shows connection status and logs (development mode)
+
+### JavaScript API Usage
+
+```javascript
+// Configuration
+const API_ENDPOINTS = {
+    createSession: '/api/session/create',
+    createStream: '/api/avatar/stream/create',
+    startStream: '/api/avatar/stream/',
+    testLLM: '/api/llm/Send'
+};
+
+// Create avatar stream
+const streamResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.createStream}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+});
+
+// Setup WebRTC connection
+const pc = new RTCPeerConnection(configuration);
+// ... WebRTC setup code ...
+
+// Send text to LLM and avatar
+const llmResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.testLLM}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: userInput })
+});
+
+const llmData = await llmResponse.json();
+// Avatar automatically speaks the response with appropriate emotion
+```
+
+## Usage
+
+### Starting the Application
+
+```bash
+dotnet run --launch-profile https
+```
+
+The application will be available at `https://localhost:7031`
+
+### Basic Workflow
+
+1. **Initialize Session**: Open the web interface, the system automatically creates a session
+2. **Connect Avatar**: Click "Connect" to initialize the D-ID avatar stream and establish WebRTC connection
+3. **Input Method**:
+   - **Voice**: Click and hold the microphone button to record
+   - **Text**: Type in the input field and press Enter or click Send
+4. **Processing Pipeline**:
+   - User input is sent to EVE LLM
+   - EVE returns response with emotional context
+   - Response is sent to D-ID with appropriate voice style
+   - Avatar speaks with synchronized video and emotional voice
+
+### Emotion Mapping
+
+The system maps EVE's emotional responses to Microsoft TTS styles:
+
+| EVE Emotion | TTS Style |
+|------------|-----------|
+| happy | cheerful |
+| excited | excited |
+| thoughtful | hopeful |
+| curious | chat |
+| confident | friendly |
+| concerned | sad |
+| empathetic | empathetic |
+
+## Troubleshooting
 
 ### Common Issues
 
-**"Stream creation failed"**
-- ✅ Check API key is correct
-- ✅ Verify presenter and driver IDs exist
-- ✅ Check D-ID account has credits
+**WebRTC Connection Failed**
+- Ensure HTTPS is enabled
+- Check browser console for ICE candidate errors
+- Verify firewall allows WebRTC connections
 
-**"Failed to send text to avatar"**
-- ✅ Ensure stream was created successfully
-- ✅ Check text is not empty
-- ✅ Verify session ID matches
+**No Audio from Avatar**
+- Check browser autoplay policies
+- Ensure user interaction before playing audio
+- Verify D-ID stream is properly initialized
 
-**"No video showing"**
-- ⚠️ This is expected - WebRTC video setup needed
-- ✅ Audio/speech generation should still work
+**Microphone Not Working**
+- Check browser permissions
+- Ensure HTTPS is enabled
+- Verify microphone is not in use by another application
 
-### Debug Steps
-1. Check Swagger endpoints work first
-2. Test with simple text like "Hello"
-3. Check browser console for errors
-4. Verify D-ID account credits and limits
+**LLM Connection Issues**
+- Check WebSocket connection to EVE
+- Verify API key is valid
+- Monitor browser console for connection errors
 
----
+### Debug Mode
 
-## 9. Next Steps
+The application includes a debug panel showing:
+- Connection status
+- WebRTC state
+- API call logs
+- Error messages
 
-1. **✅ Get basic avatar speech working** (this guide)
-2. **🔄 Add WebRTC video streaming** (future enhancement)
-3. **🔄 Connect to LLM responses** (easy swap later)
-4. **🔄 Add emotion detection from LLM** (enhancement)
+Enable verbose logging in browser console:
+```javascript
+const DEBUG = true; // Set in avatar-chat.js
+```
 
----
+## Performance Considerations
 
-## Ready to Test! 🚀
+- **Response Time**: 2-4 seconds total (LLM processing + avatar generation)
+- **Browser Requirements**: Chrome 90+, Firefox 88+, Safari 14.1+, Edge 90+
+- **Network**: Requires stable internet connection for WebRTC streaming
+- **Concurrent Users**: Each session maintains separate WebSocket and WebRTC connections
 
-Follow the steps above, then test your avatar speech functionality. Once you can make the avatar "speak" text via the API/UI, you'll have the foundation ready for LLM integration!
+## Security Considerations
+
+- All API keys should be stored securely and never exposed to frontend
+- HTTPS is mandatory for production deployment
+- Implement rate limiting for public deployments
+- Regular security audits of dependencies
+
+## Development Notes
+
+### Project Structure
+
+```
+ALIVE/
+├── Controllers/          # API Controllers
+│   ├── AvatarController.cs
+│   ├── LLMController.cs
+│   ├── SessionController.cs
+│   └── SpeechController.cs
+├── Services/            # Business Logic
+│   ├── AvatarStreamService.cs
+│   ├── WebSocketLLMService.cs
+│   └── ChatSessionService.cs
+├── Models/              # Data Models
+├── wwwroot/            # Static Files
+│   ├── index.html
+│   ├── avatar-chat.js
+│   └── styles.css
+├── appsettings.json    # Configuration
+└── Program.cs          # Application Entry Point
+```
+
+### Key Services
+
+- **AvatarStreamService**: Manages D-ID API communication
+- **WebSocketLLMService**: Handles EVE LLM WebSocket connection
+- **ChatSessionService**: Manages conversation sessions
+
+## Support
+
+For technical issues or questions regarding the ALIVE system, please contact the development team or refer to the [SERMAS Project documentation](https://sermasproject.eu/).
+
+## License
+
+This project is part of the SERMAS Project. Please refer to the project's licensing terms for usage rights and restrictions.
