@@ -22,8 +22,8 @@ public class LLMController : ControllerBase
     /// <summary>
     /// Test LLM service with a simple message
     /// </summary>
-    [HttpPost("test")]
-    public async Task<ActionResult<LLMResponse>> TestLLM([FromBody] TestLLMRequest request)
+    [HttpPost("Send")]
+    public async Task<ActionResult<LLMResponse>> SendToLLM([FromBody] TestLLMRequest request)
     {
         try
         {

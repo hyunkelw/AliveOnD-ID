@@ -33,7 +33,7 @@ const API_ENDPOINTS = {
     createStream: '/api/avatar/stream/create',
     startStream: '/api/avatar/stream/',  // {streamId}/start
     uploadAudio: '/api/audio/upload',
-    testLLM: '/api/llm/test'
+    testLLM: '/api/llm/SendToLLM' // Updated endpoint
 };
 
 // Application State
