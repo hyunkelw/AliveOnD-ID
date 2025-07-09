@@ -97,7 +97,7 @@ public class WebSocketLLMService : ILLMService, IDisposable
 
             _webSocketClient = new WebsocketClient(new Uri(wsUrl), factory)
             {
-                ReconnectTimeout = TimeSpan.FromSeconds(30),
+                ReconnectTimeout = TimeSpan.FromMinutes(15),
                 IsReconnectionEnabled = true,
                 MessageEncoding = Encoding.UTF8
             };
