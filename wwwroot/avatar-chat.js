@@ -1,6 +1,20 @@
 // Avatar Chat - Simple JavaScript Implementation
 // Debug logging utility
-const DEBUG = true;
+const DEBUG = false;
+
+function addBrowserClass() {
+    const ua = navigator.userAgent;
+    const html = document.documentElement;
+    if (ua.includes("Firefox")) {
+        html.classList.add("firefox");
+    } else if (ua.includes("Edg")) {
+        html.classList.add("edge");
+    } else if (ua.includes("Chrome") && !ua.includes("Edg") && !ua.includes("OPR")) {
+        html.classList.add("chrome");
+    } else if (/Safari/.test(ua) && !/Chrome/.test(ua) && !/Edg/.test(ua)) {
+        html.classList.add("safari");
+    }
+}
 
 function log(message, type = 'info') {
     if (!DEBUG) return;
@@ -9,18 +23,19 @@ function log(message, type = 'info') {
     const logEntry = `[${timestamp}] ${message}`;
 
     // Console log
-    console.log(logEntry);
+    if (DEBUG) {
+        console.log(logEntry);
+        // Debug panel
+        const debugPanel = document.getElementById('debug-panel');
+        const logDiv = document.createElement('div');
+        logDiv.className = `debug-log debug-${type}`;
+        logDiv.textContent = logEntry;
+        debugPanel.appendChild(logDiv);
 
-    // Debug panel
-    const debugPanel = document.getElementById('debug-panel');
-    const logDiv = document.createElement('div');
-    logDiv.className = `debug-log debug-${type}`;
-    logDiv.textContent = logEntry;
-    debugPanel.appendChild(logDiv);
-
-    // Keep only last 10 logs
-    while (debugPanel.children.length > 10) {
-        debugPanel.removeChild(debugPanel.firstChild);
+        // Keep only last 10 logs
+        while (debugPanel.children.length > 10) {
+            debugPanel.removeChild(debugPanel.firstChild);
+        }
     }
 }
 
@@ -33,7 +48,7 @@ const API_ENDPOINTS = {
     createStream: '/api/avatar/stream/create',
     startStream: '/api/avatar/stream/',  // {streamId}/start
     uploadAudio: '/api/audio/upload',
-    testLLM: '/api/llm/SendToLLM' // Updated endpoint
+    testLLM: '/api/llm/send' // Updated endpoint
 };
 
 // Application State
@@ -128,6 +143,7 @@ async function fetchSpeechAndTTSConfig() {
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     log('Application initialized');
+    addBrowserClass();
     setupEventListeners();
     createChatSession();
 
@@ -136,9 +152,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         log('Speech services will not be available', 'warning');
     }
-
-    // Update video debug info periodically
-    setInterval(updateVideoDebug, 500);
+    if (DEBUG) {
+        document.querySelector('.debug-panel').style.display = 'unset';
+        document.querySelector('.debug-buttons').style.display = 'unset';
+        document.querySelector('.status-badge').style.bottom = "90px"; // above the debug panel
+        // Update video debug info periodically
+        setInterval(updateVideoDebug, 500);
+    }
 });
 
 // Event Listeners
