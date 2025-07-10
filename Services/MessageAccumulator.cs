@@ -9,6 +9,20 @@ public class MessageAccumulator
 
     public void AppendContent(string content)
     {
+        if (_messageBuilder.Length > 0 && content.Length > 0)
+        {
+            char lastChar = _messageBuilder[^1];
+            char firstChar = content[0];
+
+            // If last char is punctuation and first is alphanumeric, and no space exists
+            if ((lastChar == '.' || lastChar == '!' || lastChar == '?') &&
+                char.IsLetterOrDigit(firstChar))
+            {
+                // Insert a space to fix: "Paris.It ..." -> "Paris. It ..."
+                _messageBuilder.Append(' ');
+            }
+        }
+
         _messageBuilder.Append(content);
     }
 

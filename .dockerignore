@@ -1,0 +1,12 @@
+# Ignore everything
+**
+# but not these
+!wwwroot/
+!Services/
+!Properties/
+!Models/
+!Controllers/
+!**/*.csproj
+!**/*.sln
+!Program.cs
+!appsettings.json
